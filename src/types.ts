@@ -24,6 +24,21 @@ export interface Chunk {
   createdAt: string;
 }
 
+export interface ManualGeneratedChunk {
+  resourcesUsed: Resource[];
+  engSentence: string;
+  vieSentence: string;
+  rTotal: number;
+  iValue: number;
+  uTotal: number;
+  category: string;
+  difficultyLabel: string;
+  audioUrl?: string | null;
+  qualityScore?: number;
+  reviewIssues?: string[];
+  generationAttempt?: number;
+}
+
 export interface AISettings {
   endpoint: string;
   apiKey: string;
