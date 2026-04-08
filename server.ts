@@ -67,7 +67,16 @@ async function startServer() {
   // Proxy for OpenRouter Models
   app.get('/api/ai/models', async (req, res) => {
     const apiKey = req.headers.authorization;
-    const endpoint = req.query.endpoint as string || 'https://openrouter.ai/api/v1';
+    let endpoint = req.query.endpoint as string;
+    
+    if (!endpoint) {
+      endpoint = 'https://openrouter.ai/api/v1';
+    } else if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+      endpoint = 'https://' + endpoint;
+    }
+    if (endpoint.endsWith('/')) {
+      endpoint = endpoint.slice(0, -1);
+    }
 
     if (!apiKey) {
       return res.status(401).json({ error: 'API Key required' });
@@ -91,14 +100,24 @@ async function startServer() {
       res.json(data);
     } catch (error) {
       console.error('Proxy Models Error:', error);
-      res.status(500).json({ error: 'Failed to fetch models via proxy' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch models via proxy' });
     }
   });
 
   // Proxy for OpenRouter Chat
   app.post('/api/ai/chat', async (req, res) => {
     const apiKey = req.headers.authorization;
-    const { endpoint = 'https://openrouter.ai/api/v1', ...body } = req.body;
+    let { endpoint, ...body } = req.body;
+
+    if (!endpoint) {
+      endpoint = 'https://openrouter.ai/api/v1';
+    } else if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+      endpoint = 'https://' + endpoint;
+    }
+    // Remove trailing slash if present
+    if (endpoint.endsWith('/')) {
+      endpoint = endpoint.slice(0, -1);
+    }
 
     if (!apiKey) {
       return res.status(401).json({ error: 'API Key required' });
@@ -125,7 +144,7 @@ async function startServer() {
       res.json(data);
     } catch (error) {
       console.error('Proxy Chat Error:', error);
-      res.status(500).json({ error: 'Failed to call AI via proxy' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to call AI via proxy' });
     }
   });
 

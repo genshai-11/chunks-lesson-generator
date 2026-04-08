@@ -87,7 +87,8 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API Error: ${response.status}`);
+        const errorMessage = errorData.error?.message || errorData.error || errorData.message || `API Error: ${response.status}`;
+        throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
       }
 
       const data = await response.json();
