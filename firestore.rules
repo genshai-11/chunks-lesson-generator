@@ -1,0 +1,91 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidNumber(field) {
+      return request.resource.data[field] is number;
+    }
+
+    function isValidResource() {
+      return hasRequiredFields(['name', 'color', 'ohm', 'userId', 'createdAt']) &&
+             isValidString('name', 1, 100) &&
+             request.resource.data.color in ['Green', 'Blue', 'Pink', 'Red'] &&
+             isValidNumber('ohm') &&
+             request.resource.data.userId == request.auth.uid;
+    }
+
+    function isValidChunk() {
+      return hasRequiredFields(['resourcesUsed', 'engSentence', 'vieSentence', 'rTotal', 'iValue', 'uTotal', 'category', 'difficultyLabel', 'userId', 'createdAt']) &&
+             request.resource.data.resourcesUsed is list &&
+             request.resource.data.resourcesUsed.size() <= 50 &&
+             isValidString('engSentence', 1, 1000) &&
+             isValidString('vieSentence', 1, 1000) &&
+             isValidNumber('rTotal') &&
+             isValidNumber('iValue') &&
+             isValidNumber('uTotal') &&
+             isValidString('category', 1, 100) &&
+             isValidString('difficultyLabel', 1, 100) &&
+             request.resource.data.userId == request.auth.uid;
+    }
+
+    function isValidAISettings() {
+      return hasRequiredFields(['endpoint', 'apiKey', 'primaryModel', 'fallbackModel']) &&
+             isValidString('endpoint', 1, 500) &&
+             isValidString('apiKey', 1, 500) &&
+             isValidString('primaryModel', 1, 200) &&
+             isValidString('fallbackModel', 1, 200) &&
+             (!('elevenLabsApiKey' in request.resource.data) || isValidString('elevenLabsApiKey', 1, 500)) &&
+             (!('elevenLabsModel' in request.resource.data) || isValidString('elevenLabsModel', 1, 200)) &&
+             (!('elevenLabsVoiceId' in request.resource.data) || isValidString('elevenLabsVoiceId', 1, 200));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      // User document itself (if needed)
+      allow read, write: if isOwner(userId);
+
+      match /resources/{resourceId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidResource();
+        allow update: if isOwner(userId) && isValidResource() && request.resource.data.userId == resource.data.userId && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(userId);
+      }
+
+      match /chunks/{chunkId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChunk();
+        allow update: if isOwner(userId) && isValidChunk() && request.resource.data.userId == resource.data.userId && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(userId);
+      }
+
+      match /settings/{settingId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidAISettings();
+      }
+    }
+  }
+}
