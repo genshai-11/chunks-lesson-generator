@@ -19,7 +19,7 @@ export interface Chunk {
   uTotal: number;
   category: string;
   difficultyLabel: string;
-  audioUrl?: string;
+  audioUrl?: string | null;
   userId: string;
   createdAt: string;
 }

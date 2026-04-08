@@ -136,7 +136,7 @@ export default function MixerTab() {
         iValue,
         uTotal,
         difficultyLabel,
-        audioUrl: audioUrl || undefined
+        audioUrl: audioUrl || null
       });
     } catch (error) {
       alert("Failed to generate chunk. See console for details.");
@@ -218,7 +218,7 @@ export default function MixerTab() {
       // Generate audio for each result
       const resultsWithAudio = await Promise.all(validatedResults.map(async (res) => {
         const audioUrl = await generateAudio(res.engSentence, aiSettings);
-        return { ...res, audioUrl: audioUrl || undefined };
+        return { ...res, audioUrl: audioUrl || null };
       }));
 
       setAiResults(resultsWithAudio);
