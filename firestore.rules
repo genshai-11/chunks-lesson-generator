@@ -64,6 +64,31 @@ service cloud.firestore {
     // ===============================================================
     // Rules
     // ===============================================================
+    match /workspaces/{workspaceId} {
+      allow read, write: if isAuthenticated();
+
+      match /resources/{resourceId} {
+        allow read: if isAuthenticated();
+        // Allow any authenticated user to create/update/delete in the shared workspace
+        allow create: if isAuthenticated() && isValidResource();
+        allow update: if isAuthenticated() && isValidResource() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isAuthenticated();
+      }
+
+      match /chunks/{chunkId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidChunk();
+        allow update: if isAuthenticated() && isValidChunk() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isAuthenticated();
+      }
+
+      match /settings/{settingId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && isValidAISettings();
+      }
+    }
+    
+    // Keep legacy user rules for backward compatibility if needed, but we will migrate to workspaces
     match /users/{userId} {
       // User document itself (if needed)
       allow read, write: if isOwner(userId);

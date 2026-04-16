@@ -1,4 +1,4 @@
-export type ColorCategory = 'Green' | 'Blue' | 'Pink' | 'Red';
+export type ColorCategory = 'Green' | 'Blue' | 'Pink' | 'Red' | 'Yellow' | 'Orange' | 'Purple';
 
 export interface Resource {
   id: string;
@@ -19,6 +19,7 @@ export interface Chunk {
   uTotal: number;
   category: string;
   difficultyLabel: string;
+  evaluation?: string;
   audioUrl?: string | null;
   userId: string;
   createdAt: string;

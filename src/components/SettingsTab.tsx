@@ -12,20 +12,24 @@ export default function SettingsTab() {
     primaryModel: 'google/gemini-pro-1.5',
     fallbackModel: 'anthropic/claude-3-haiku',
     elevenLabsApiKey: '',
-    elevenLabsModel: 'eleven_monolingual_v1',
-    elevenLabsVoiceId: 'pNInz6obpg8ndclKuztW',
+    elevenLabsModel: 'eleven_multilingual_v2',
+    elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [elevenLabsVoices, setElevenLabsVoices] = useState<any[]>([]);
+  const [fetchingVoices, setFetchingVoices] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const [previewText, setPreviewText] = useState('Hello, this is a test of the selected voice.');
 
   useEffect(() => {
     if (!auth.currentUser) return;
 
     const loadSettings = async () => {
       try {
-        const docRef = doc(db, `users/${auth.currentUser!.uid}/settings`, 'ai');
+        const docRef = doc(db, `workspaces/default/settings`, 'ai');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setSettings(docSnap.data() as AISettings);
@@ -44,7 +48,7 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, `users/${auth.currentUser.uid}/settings`, 'ai');
+      const docRef = doc(db, `workspaces/default/settings`, 'ai');
       await setDoc(docRef, {
         endpoint: settings.endpoint,
         apiKey: settings.apiKey,
@@ -64,7 +68,7 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, `users/${auth.currentUser.uid}/settings`, 'ai');
+      const docRef = doc(db, `workspaces/default/settings`, 'ai');
       await setDoc(docRef, {
         elevenLabsApiKey: settings.elevenLabsApiKey,
         elevenLabsModel: settings.elevenLabsModel,
@@ -93,6 +97,91 @@ export default function SettingsTab() {
       alert('Failed to fetch models.');
     } finally {
       setFetchingModels(false);
+    }
+  };
+
+  const handleFetchVoices = async () => {
+    if (!settings.elevenLabsApiKey) {
+      alert('Please enter an ElevenLabs API key first.');
+      return;
+    }
+    setFetchingVoices(true);
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+        headers: {
+          'xi-api-key': settings.elevenLabsApiKey,
+        },
+      });
+      
+      if (!response.ok) {
+        let errorMessage = 'Failed to fetch voices';
+        try {
+          const errorData = await response.json();
+          if (errorData.detail && errorData.detail.message) {
+            errorMessage = errorData.detail.message;
+          } else if (errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (e) {
+          // Ignore JSON parse errors if response is not JSON
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      setElevenLabsVoices(data.voices || []);
+    } catch (error: any) {
+      console.error('Error fetching voices:', error);
+      alert(`Failed to fetch voices: ${error.message}`);
+    } finally {
+      setFetchingVoices(false);
+    }
+  };
+
+  const handlePreviewVoice = async () => {
+    if (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) {
+      alert('Please configure API Key and Voice ID first.');
+      return;
+    }
+    setPreviewingVoice(true);
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${settings.elevenLabsVoiceId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': settings.elevenLabsApiKey,
+        },
+        body: JSON.stringify({ 
+          text: previewText,
+          model_id: settings.elevenLabsModel || 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.5,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        if (error.detail && error.detail.message) {
+          throw new Error(error.detail.message);
+        } else if (error.error) {
+          throw new Error(error.error);
+        }
+        throw new Error('Failed to generate preview');
+      }
+
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      await audio.play();
+    } catch (error: any) {
+      console.error('Error previewing voice:', error);
+      alert(`Preview failed: ${error.message}`);
+    } finally {
+      setPreviewingVoice(false);
     }
   };
 
@@ -259,16 +348,38 @@ export default function SettingsTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
-                <Key className="w-4 h-4 mr-2 text-gray-400" /> ElevenLabs API Key
+              <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center justify-between">
+                <span className="flex items-center">
+                  <Key className="w-4 h-4 mr-2 text-gray-400" /> ElevenLabs API Key
+                </span>
+                <button
+                  onClick={handleFetchVoices}
+                  disabled={fetchingVoices || !settings.elevenLabsApiKey}
+                  className="text-xs flex items-center text-red-600 hover:text-red-700 font-medium disabled:text-gray-400"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${fetchingVoices ? 'animate-spin' : ''}`} />
+                  Load Voices
+                </button>
               </label>
               <input
                 type="password"
                 value={settings.elevenLabsApiKey || ''}
                 onChange={(e) => setSettings({ ...settings, elevenLabsApiKey: e.target.value })}
                 placeholder="Enter ElevenLabs API Key"
-                className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50 mb-3"
               />
+              {elevenLabsVoices.length > 0 && (
+                <select
+                  onChange={(e) => setSettings({ ...settings, elevenLabsVoiceId: e.target.value })}
+                  className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                  value={settings.elevenLabsVoiceId}
+                >
+                  <option value="">Select a voice...</option>
+                  {elevenLabsVoices.map((v) => (
+                    <option key={v.voice_id} value={v.voice_id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
@@ -281,7 +392,7 @@ export default function SettingsTab() {
                 type="text"
                 value={settings.elevenLabsModel || ''}
                 onChange={(e) => setSettings({ ...settings, elevenLabsModel: e.target.value })}
-                placeholder="e.g., eleven_monolingual_v1"
+                placeholder="e.g., eleven_multilingual_v2"
                 className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
               />
             </div>
@@ -290,13 +401,38 @@ export default function SettingsTab() {
               <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
                 <Volume2 className="w-4 h-4 mr-2 text-gray-400" /> Voice ID
               </label>
-              <input
-                type="text"
-                value={settings.elevenLabsVoiceId || ''}
-                onChange={(e) => setSettings({ ...settings, elevenLabsVoiceId: e.target.value })}
-                placeholder="e.g., pNInz6obpg8ndclKuztW"
-                className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
-              />
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={settings.elevenLabsVoiceId || ''}
+                  onChange={(e) => setSettings({ ...settings, elevenLabsVoiceId: e.target.value })}
+                  placeholder="e.g., 21m00Tcm4TlvDq8ikWAM"
+                  className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-gray-100">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Preview Voice
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  placeholder="Text to preview..."
+                  className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                />
+                <button
+                  onClick={handlePreviewVoice}
+                  disabled={previewingVoice || !settings.elevenLabsVoiceId}
+                  className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:bg-gray-300 transition-colors flex items-center whitespace-nowrap"
+                >
+                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
+                  Preview
+                </button>
+              </div>
             </div>
           </div>
         </div>

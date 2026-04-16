@@ -69,13 +69,24 @@ async function startServer() {
     const apiKey = req.headers.authorization;
     let endpoint = req.query.endpoint as string;
     
-    if (!endpoint) {
+    if (!endpoint || endpoint.trim() === '') {
       endpoint = 'https://openrouter.ai/api/v1';
-    } else if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
-      endpoint = 'https://' + endpoint;
+    } else {
+      endpoint = endpoint.trim();
+      if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+        endpoint = 'https://' + endpoint;
+      }
     }
     if (endpoint.endsWith('/')) {
       endpoint = endpoint.slice(0, -1);
+    }
+
+    const targetUrl = `${endpoint}/models`;
+
+    try {
+      new URL(targetUrl);
+    } catch (e) {
+      return res.status(400).json({ error: `Invalid API endpoint URL: ${targetUrl}` });
     }
 
     if (!apiKey) {
@@ -83,7 +94,7 @@ async function startServer() {
     }
 
     try {
-      const response = await fetch(`${endpoint}/models`, {
+      const response = await fetch(targetUrl, {
         method: 'GET',
         headers: {
           'Authorization': apiKey,
@@ -98,9 +109,27 @@ async function startServer() {
 
       const data = await response.json();
       res.json(data);
-    } catch (error) {
-      console.error('Proxy Models Error:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch models via proxy' });
+    } catch (error: any) {
+      console.error(`Proxy Models Error for URL ${targetUrl}:`, error);
+      
+      let errorMessage = 'Failed to fetch models via proxy';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        if (error.cause) {
+          const cause = error.cause as any;
+          if (cause.code === 'ECONNREFUSED') {
+            errorMessage = `Connection refused. The server at ${targetUrl} is not accepting connections. Check if the server is running and the port is open.`;
+          } else if (cause.message && cause.message.includes('other side closed')) {
+            errorMessage = `Connection closed by the remote server at ${targetUrl}. The server might be crashing, overloaded, or blocking the request.`;
+          } else if (cause.code === 'ETIMEDOUT') {
+            errorMessage = `Connection timed out when trying to reach ${targetUrl}.`;
+          } else {
+            errorMessage = `${error.message} (Cause: ${cause.message || cause.code || 'Unknown'})`;
+          }
+        }
+      }
+      
+      res.status(502).json({ error: errorMessage, target: targetUrl });
     }
   });
 
@@ -109,14 +138,26 @@ async function startServer() {
     const apiKey = req.headers.authorization;
     let { endpoint, ...body } = req.body;
 
-    if (!endpoint) {
+    if (!endpoint || endpoint.trim() === '') {
       endpoint = 'https://openrouter.ai/api/v1';
-    } else if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
-      endpoint = 'https://' + endpoint;
+    } else {
+      endpoint = endpoint.trim();
+      if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+        endpoint = 'https://' + endpoint;
+      }
     }
+    
     // Remove trailing slash if present
     if (endpoint.endsWith('/')) {
       endpoint = endpoint.slice(0, -1);
+    }
+
+    const targetUrl = `${endpoint}/chat/completions`;
+
+    try {
+      new URL(targetUrl); // Validate URL format
+    } catch (e) {
+      return res.status(400).json({ error: `Invalid API endpoint URL: ${targetUrl}` });
     }
 
     if (!apiKey) {
@@ -124,7 +165,7 @@ async function startServer() {
     }
 
     try {
-      const response = await fetch(`${endpoint}/chat/completions`, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,16 +176,47 @@ async function startServer() {
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return res.status(response.status).json(errorData);
+      let rawText = '';
+      try {
+        rawText = await response.text();
+      } catch (e) {
+        // Ignore text read error
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        // If it's not JSON, wrap it so the client doesn't crash on response.json()
+        data = { rawResponse: rawText };
+      }
+
+      if (!response.ok) {
+        return res.status(response.status).json(data);
+      }
+
       res.json(data);
-    } catch (error) {
-      console.error('Proxy Chat Error:', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to call AI via proxy' });
+    } catch (error: any) {
+      console.error(`Proxy Chat Error for URL ${targetUrl}:`, error);
+      
+      let errorMessage = 'Failed to call AI via proxy';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        if (error.cause) {
+          const cause = error.cause as any;
+          if (cause.code === 'ECONNREFUSED') {
+            errorMessage = `Connection refused. The server at ${targetUrl} is not accepting connections. Check if the server is running and the port is open.`;
+          } else if (cause.message && cause.message.includes('other side closed')) {
+            errorMessage = `Connection closed by the remote server at ${targetUrl}. The server might be crashing, overloaded, or blocking the request.`;
+          } else if (cause.code === 'ETIMEDOUT') {
+            errorMessage = `Connection timed out when trying to reach ${targetUrl}.`;
+          } else {
+            errorMessage = `${error.message} (Cause: ${cause.message || cause.code || 'Unknown'})`;
+          }
+        }
+      }
+      
+      res.status(502).json({ error: errorMessage, target: targetUrl });
     }
   });
 

@@ -30,10 +30,17 @@ export default function ResourcesTab() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
+    if (color === 'Pink') setOhm(3);
+    else if (color === 'Green') setOhm(5);
+    else if (color === 'Blue') setOhm(7);
+    else if (color === 'Red') setOhm(9);
+  }, [color]);
+
+  useEffect(() => {
     if (!auth.currentUser) return;
 
     const unsubscribe = onSnapshot(
-      collection(db, `users/${auth.currentUser.uid}/resources`),
+      collection(db, `workspaces/default/resources`),
       (snapshot) => {
         const resData: Resource[] = [];
         snapshot.forEach((doc) => {
@@ -43,7 +50,7 @@ export default function ResourcesTab() {
         setLoading(false);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, `users/${auth.currentUser?.uid}/resources`);
+        handleFirestoreError(error, OperationType.LIST, `workspaces/default/resources`);
         setLoading(false);
       }
     );
@@ -118,13 +125,13 @@ export default function ResourcesTab() {
     try {
       const batch = writeBatch(db);
       selectedIds.forEach(id => {
-        const docRef = doc(db, `users/${auth.currentUser!.uid}/resources`, id);
+        const docRef = doc(db, `workspaces/default/resources`, id);
         batch.delete(docRef);
       });
       await batch.commit();
       setSelectedIds(new Set());
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/resources`);
+      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
     } finally {
       setLoading(false);
     }
@@ -140,7 +147,7 @@ export default function ResourcesTab() {
       let currentBatch = writeBatch(db);
 
       for (const res of resources) {
-        const docRef = doc(db, `users/${auth.currentUser.uid}/resources`, res.id);
+        const docRef = doc(db, `workspaces/default/resources`, res.id);
         currentBatch.delete(docRef);
         count++;
 
@@ -155,7 +162,7 @@ export default function ResourcesTab() {
       }
       setShowClearConfirm(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/resources`);
+      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
     } finally {
       setLoading(false);
     }
@@ -168,13 +175,13 @@ export default function ResourcesTab() {
     try {
       const batch = writeBatch(db);
       selectedIds.forEach(id => {
-        const docRef = doc(db, `users/${auth.currentUser!.uid}/resources`, id);
+        const docRef = doc(db, `workspaces/default/resources`, id);
         batch.update(docRef, { color: newColor });
       });
       await batch.commit();
       setSelectedIds(new Set());
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}/resources`);
+      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
     } finally {
       setLoading(false);
     }
@@ -206,7 +213,7 @@ export default function ResourcesTab() {
       let currentBatch = writeBatch(db);
 
       for (const id of duplicates) {
-        const docRef = doc(db, `users/${auth.currentUser.uid}/resources`, id);
+        const docRef = doc(db, `workspaces/default/resources`, id);
         currentBatch.delete(docRef);
         count++;
 
@@ -221,7 +228,49 @@ export default function ResourcesTab() {
       }
       alert(`Removed ${duplicates.length} duplicates.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/resources`);
+      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateOhms = async () => {
+    if (!auth.currentUser || resources.length === 0) return;
+    
+    const confirmUpdate = window.confirm("Are you sure you want to update all existing resources to the new Ohm values (Pink: 3, Green: 5, Blue: 7, Red: 9)?");
+    if (!confirmUpdate) return;
+
+    setLoading(true);
+    try {
+      const batchSize = 400;
+      let count = 0;
+      let currentBatch = writeBatch(db);
+
+      for (const res of resources) {
+        let newOhm = res.ohm;
+        if (res.color === 'Pink') newOhm = 3;
+        else if (res.color === 'Green') newOhm = 5;
+        else if (res.color === 'Blue') newOhm = 7;
+        else if (res.color === 'Red') newOhm = 9;
+
+        if (newOhm !== res.ohm) {
+          const docRef = doc(db, `workspaces/default/resources`, res.id);
+          currentBatch.update(docRef, { ohm: newOhm });
+          count++;
+
+          if (count % batchSize === 0) {
+            await currentBatch.commit();
+            currentBatch = writeBatch(db);
+          }
+        }
+      }
+
+      if (count % batchSize !== 0) {
+        await currentBatch.commit();
+      }
+      alert(`Successfully updated Ohms for ${count} resources.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
     } finally {
       setLoading(false);
     }
@@ -232,7 +281,7 @@ export default function ResourcesTab() {
     if (!name || !color || ohm === '' || !auth.currentUser) return;
 
     try {
-      await addDoc(collection(db, `users/${auth.currentUser.uid}/resources`), {
+      await addDoc(collection(db, `workspaces/default/resources`), {
         name,
         color,
         ohm: Number(ohm),
@@ -242,17 +291,17 @@ export default function ResourcesTab() {
       setName('');
       setOhm('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `users/${auth.currentUser.uid}/resources`);
+      handleFirestoreError(error, OperationType.CREATE, `workspaces/default/resources`);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      await deleteDoc(doc(db, `users/${auth.currentUser.uid}/resources`, id));
+      await deleteDoc(doc(db, `workspaces/default/resources`, id));
       setShowDeleteConfirm(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${auth.currentUser.uid}/resources/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources/${id}`);
     }
   };
 
@@ -270,7 +319,7 @@ export default function ResourcesTab() {
     if (!editingId || !auth.currentUser || !editData.name || editData.ohm === undefined) return;
 
     try {
-      const docRef = doc(db, `users/${auth.currentUser.uid}/resources`, editingId);
+      const docRef = doc(db, `workspaces/default/resources`, editingId);
       await updateDoc(docRef, {
         name: editData.name,
         color: editData.color,
@@ -279,7 +328,7 @@ export default function ResourcesTab() {
       setEditingId(null);
       setEditData({});
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}/resources/${editingId}`);
+      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources/${editingId}`);
     }
   };
 
@@ -301,10 +350,10 @@ export default function ResourcesTab() {
       
       for (const row of validRows) {
         const mappings = [
-          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 3 },
-          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 5 },
-          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 7 },
-          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 1 },
+          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 5 },
+          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 7 },
+          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 9 },
+          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 3 },
         ];
 
         for (const map of mappings) {
@@ -357,10 +406,10 @@ export default function ResourcesTab() {
       
       for (const row of validRows) {
         const mappings = [
-          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 3 },
-          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 5 },
-          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 7 },
-          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 1 },
+          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 5 },
+          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 7 },
+          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 9 },
+          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 3 },
         ];
 
         let foundCustom = false;
@@ -406,7 +455,7 @@ export default function ResourcesTab() {
       let count = 0;
 
       for (const res of stagedResources) {
-        const docRef = doc(collection(db, `users/${auth.currentUser.uid}/resources`));
+        const docRef = doc(collection(db, `workspaces/default/resources`));
         currentBatch.set(docRef, {
           ...res,
           userId: auth.currentUser.uid,
@@ -619,6 +668,12 @@ export default function ResourcesTab() {
               className="flex items-center px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 transition-colors text-sm font-medium"
             >
               <Trash2 className="w-4 h-4 mr-2" /> Clean Duplicates
+            </button>
+            <button
+              onClick={handleUpdateOhms}
+              className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors text-sm font-medium"
+            >
+              <Sparkles className="w-4 h-4 mr-2" /> Update Ohms
             </button>
             <button
               onClick={handleImportNuanceData}

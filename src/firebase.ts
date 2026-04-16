@@ -7,41 +7,12 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 
-export interface AuthActionResult {
-  ok: boolean;
-  code?: string;
-  message?: string;
-  host?: string;
-}
-
-export const signInWithGoogle = async (): Promise<AuthActionResult> => {
+export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   try {
     await signInWithPopup(auth, provider);
-    return { ok: true };
-  } catch (error: any) {
-    const code = error?.code || 'auth/unknown';
-    const host = typeof window !== 'undefined' ? window.location.hostname : undefined;
-
-    if (code === 'auth/unauthorized-domain') {
-      const message = `This domain is not authorized in Firebase Authentication. Add '${host}' to Firebase Authentication > Settings > Authorized domains.`;
-      console.error('Error signing in with Google', { code, host, error });
-      return {
-        ok: false,
-        code,
-        host,
-        message,
-      };
-    }
-
-    const message = error?.message || 'Failed to sign in with Google.';
-    console.error('Error signing in with Google', error);
-    return {
-      ok: false,
-      code,
-      host,
-      message,
-    };
+  } catch (error) {
+    console.error("Error signing in with Google", error);
   }
 };
 
@@ -49,7 +20,7 @@ export const logOut = async () => {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error('Error signing out', error);
+    console.error("Error signing out", error);
   }
 };
 
