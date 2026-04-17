@@ -86,6 +86,20 @@ export default function AudioOhmTestTab() {
     return undefined;
   };
 
+  const getBaseOhms = async (): Promise<Record<string, number> | undefined> => {
+    if (!auth.currentUser) return undefined;
+    try {
+      const docRef = doc(db, `workspaces/default/settings`, 'baseOhms');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as Record<string, number>;
+      }
+    } catch (e) {
+      console.error("Failed to load baseOhms", e);
+    }
+    return undefined;
+  };
+
   const handleTranscription = async (blob: Blob) => {
     setStatus('transcribing');
     try {
@@ -108,7 +122,8 @@ export default function AudioOhmTestTab() {
     setStatus('analyzing');
     try {
       const settings = await getSettings();
-      const analysisResult = await analyzeTranscript(textToAnalyze, settings);
+      const baseOhms = await getBaseOhms();
+      const analysisResult = await analyzeTranscript(textToAnalyze, settings, baseOhms);
       setResult(analysisResult);
       setStatus('completed');
     } catch (err: any) {

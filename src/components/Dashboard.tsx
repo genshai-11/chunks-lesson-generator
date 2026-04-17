@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { logOut, auth } from '../firebase';
-import { LogOut, Database, Wand2, ListMusic, Settings as SettingsIcon, Mic, User, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LogOut, Database, Wand2, ListMusic, Settings as SettingsIcon, Mic, User, PanelLeftClose, PanelLeftOpen, PlayCircle } from 'lucide-react';
 import ResourcesTab from './ResourcesTab';
 import MixerTab from './MixerTab';
 import ChunksTab from './ChunksTab';
+import PlayerTab from './PlayerTab';
 import SettingsTab from './SettingsTab';
 import AudioOhmTestTab from './AudioOhmTestTab';
 
-type TabType = 'resources' | 'mixer' | 'chunks' | 'audio' | 'settings';
+type TabType = 'resources' | 'mixer' | 'chunks' | 'player' | 'audio' | 'settings';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('resources');
@@ -17,6 +18,7 @@ export default function Dashboard() {
     { id: 'resources', label: 'Resources', icon: Database },
     { id: 'mixer', label: 'The Mixer', icon: Wand2 },
     { id: 'chunks', label: 'Chunks DB', icon: ListMusic },
+    { id: 'player', label: 'Player', icon: PlayCircle },
     { id: 'audio', label: 'Audio Ohm', icon: Mic },
     { id: 'settings', label: 'Settings', icon: SettingsIcon },
   ] as const;
@@ -136,6 +138,7 @@ export default function Dashboard() {
           {activeTab === 'resources' && <ResourcesTab />}
           {activeTab === 'mixer' && <MixerTab />}
           {activeTab === 'chunks' && <ChunksTab />}
+          {activeTab === 'player' && <PlayerTab />}
           {activeTab === 'audio' && <AudioOhmTestTab />}
           {activeTab === 'settings' && <SettingsTab />}
         </div>

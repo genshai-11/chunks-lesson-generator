@@ -24,7 +24,7 @@ async function startServer() {
     }
 
     const apiKey = clientApiKey || process.env.ELEVENLABS_API_KEY;
-    const finalVoiceId = voiceId || 'pNInz6obpg8ndclKuztW';
+    const finalVoiceId = voiceId || '21m00Tcm4TlvDq8ikWAM';
     const finalModelId = modelId || 'eleven_monolingual_v1';
 
     if (!apiKey || apiKey === 'MY_ELEVENLABS_API_KEY') {

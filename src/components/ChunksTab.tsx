@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc, doc, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Chunk, AISettings } from '../types';
-import { Trash2, Volume2, Play, Loader2, Sparkles, Download } from 'lucide-react';
+import { Trash2, Volume2, Play, Loader2, Sparkles, Download, Filter, ChevronDown, ChevronUp, SlidersHorizontal, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { generateAudio } from '../services/audioService';
 import Papa from 'papaparse';
 
@@ -34,6 +35,14 @@ export default function ChunksTab() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isGeneratingBulkAudio, setIsGeneratingBulkAudio] = useState(false);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   const uniqueCategories = React.useMemo(() => Array.from(new Set(chunks.map(c => c.category))).filter(Boolean).sort(), [chunks]);
   const uniqueUs = React.useMemo(() => (Array.from(new Set(chunks.map(c => Number(c.uTotal)))) as number[]).filter(n => !isNaN(n)).sort((a: number, b: number) => a - b), [chunks]);
@@ -108,26 +117,43 @@ export default function ChunksTab() {
 
   const handleBulkDelete = async () => {
     if (!auth.currentUser || selectedIds.size === 0) return;
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${selectedIds.size} selected chunks?`);
-    if (!confirmDelete) return;
+    
+    setConfirmModal({
+      title: 'Confirm Bulk Delete',
+      message: `Are you sure you want to delete ${selectedIds.size} selected chunks? This action cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setIsDeletingBulk(true);
+        try {
+          const batchSize = 400;
+          let count = 0;
+          let currentBatch = writeBatch(db);
 
-    setIsDeletingBulk(true);
-    let successCount = 0;
-    let failCount = 0;
+          for (const id of selectedIds) {
+            const docRef = doc(db, `workspaces/default/chunks`, id);
+            currentBatch.delete(docRef);
+            count++;
 
-    for (const id of selectedIds) {
-      try {
-        await deleteDoc(doc(db, `workspaces/default/chunks`, id));
-        successCount++;
-      } catch (error) {
-        console.error('Error deleting chunk', id, error);
-        failCount++;
+            if (count % batchSize === 0) {
+              await currentBatch.commit();
+              currentBatch = writeBatch(db);
+            }
+          }
+
+          if (count % batchSize !== 0) {
+            await currentBatch.commit();
+          }
+
+          setSelectedIds(new Set());
+          showToast(`Successfully deleted ${count} chunks.`);
+        } catch (error) {
+          console.error("Error bulk deleting chunks:", error);
+          showToast("Failed to delete chunks.");
+        } finally {
+          setIsDeletingBulk(false);
+        }
       }
-    }
-
-    setIsDeletingBulk(false);
-    setSelectedIds(new Set());
-    alert(`Bulk delete complete.\nSuccess: ${successCount}\nFailed: ${failCount}`);
+    });
   };
 
   const handleBulkExport = () => {
@@ -177,11 +203,11 @@ export default function ChunksTab() {
         await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), {
           audioUrl: audioUrl
         });
-        // Audio will be updated via onSnapshot
+        showToast("Audio generated successfully");
       }
     } catch (error: any) {
       console.error('Error generating audio:', error);
-      alert(`Failed to generate audio. ${error.message || 'Please check your ElevenLabs settings.'}`);
+      showToast(`Generation failed: ${error.message || 'Check ElevenLabs settings'}`);
     } finally {
       setGeneratingAudioId(null);
     }
@@ -224,7 +250,7 @@ export default function ChunksTab() {
     const chunksToProcess = chunks.filter(c => selectedIds.has(c.id) && !c.audioUrl);
     
     if (chunksToProcess.length === 0) {
-      alert("All selected chunks already have audio.");
+      showToast("All selected chunks already have audio.");
       setIsGeneratingBulkAudio(false);
       return;
     }
@@ -255,100 +281,199 @@ export default function ChunksTab() {
     setSelectedIds(new Set());
     
     if (failCount > 0) {
-      alert(`Bulk generation complete.\nSuccess: ${successCount}\nFailed: ${failCount}\nLast Error: ${lastError}`);
+      showToast(`Partial bulk generation complete. Success: ${successCount}, Failed: ${failCount}. Last error: ${lastError}`);
     } else {
-      alert(`Bulk generation complete.\nSuccess: ${successCount}\nFailed: ${failCount}`);
+      showToast(`Bulk audio generation successful. Processed ${successCount} items.`);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-20 left-1/2 z-50 px-6 py-3 bg-gray-900 text-white text-sm font-bold rounded-full shadow-2xl"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {confirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-100"
+            >
+              <h3 className="text-lg font-black text-gray-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">{confirmModal.message}</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmModal.onConfirm}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-lg shadow-red-200 transition-colors"
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h3 className="text-lg font-medium text-gray-900">Generated Chunks Database</h3>
-          <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-bold text-gray-900 tracking-tight">Database</h3>
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                showFilters 
+                ? 'bg-red-600 text-white shadow-lg shadow-red-100' 
+                : 'bg-white text-gray-600 border border-gray-200 hover:border-red-300'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+              {Object.values(activeFilters).some(v => v instanceof Set ? v.size > 0 : v !== 'all') && (
+                <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+              )}
+            </button>
+          </div>
+          <span className="bg-red-100 text-red-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
             {filteredChunks.length} / {chunks.length} Total
           </span>
         </div>
 
         {/* Filters */}
-        <div className="p-4 border-b border-gray-100 bg-white">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-            {/* Categories */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Category</label>
-              <div className="max-h-32 overflow-y-auto space-y-1 border rounded p-2 bg-gray-50">
-                {uniqueCategories.map(cat => (
-                  <label key={cat} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={pendingFilters.categories.has(cat)} onChange={() => toggleFilter('categories', cat)} className="rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                    {cat}
-                  </label>
-                ))}
-                {uniqueCategories.length === 0 && <span className="text-xs text-gray-400">No categories</span>}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden bg-white border-b border-gray-100"
+            >
+              <div className="p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-6">
+                  {/* Categories */}
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Category</label>
+                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      {uniqueCategories.map(cat => (
+                        <label key={cat} className="flex items-center gap-3 text-sm cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={pendingFilters.categories.has(cat)} 
+                            onChange={() => toggleFilter('categories', cat)} 
+                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
+                          />
+                          <span className={`font-medium transition-colors ${pendingFilters.categories.has(cat) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{cat}</span>
+                        </label>
+                      ))}
+                      {uniqueCategories.length === 0 && <span className="text-xs text-gray-400 italic">No categories</span>}
+                    </div>
+                  </div>
+                  {/* U Values */}
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">U (Difficulty)</label>
+                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      {uniqueUs.map(u => (
+                        <label key={u} className="flex items-center gap-3 text-sm cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={pendingFilters.us.has(u)} 
+                            onChange={() => toggleFilter('us', u)} 
+                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
+                          />
+                          <span className={`font-medium transition-colors ${pendingFilters.us.has(u) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{u.toFixed(1)}</span>
+                        </label>
+                      ))}
+                      {uniqueUs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
+                    </div>
+                  </div>
+                  {/* R Values */}
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">R (Ohm)</label>
+                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      {uniqueRs.map(r => (
+                        <label key={r} className="flex items-center gap-3 text-sm cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={pendingFilters.rs.has(r)} 
+                            onChange={() => toggleFilter('rs', r)} 
+                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
+                          />
+                          <span className={`font-medium transition-colors ${pendingFilters.rs.has(r) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{r.toFixed(1)}</span>
+                        </label>
+                      ))}
+                      {uniqueRs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
+                    </div>
+                  </div>
+                  {/* I Values */}
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">I (Intensity)</label>
+                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
+                      {uniqueIs.map(i => (
+                        <label key={i} className="flex items-center gap-3 text-sm cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={pendingFilters.is.has(i)} 
+                            onChange={() => toggleFilter('is', i)} 
+                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
+                          />
+                          <span className={`font-medium transition-colors ${pendingFilters.is.has(i) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{i.toFixed(1)}</span>
+                        </label>
+                      ))}
+                      {uniqueIs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
+                    </div>
+                  </div>
+                  {/* Audio Status */}
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Audio Status</label>
+                    <div className="space-y-2">
+                       {['all', 'hasAudio', 'noAudio'].map((option) => (
+                         <button
+                           key={option}
+                           onClick={() => toggleFilter('audio', option as any)}
+                           className={`w-full text-left px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                             pendingFilters.audio === option 
+                             ? 'bg-red-50 border-red-200 text-red-700 shadow-sm' 
+                             : 'bg-white border-gray-200 text-gray-500 hover:border-red-200'
+                           }`}
+                         >
+                           {option === 'all' ? 'Show All' : option === 'hasAudio' ? 'Has Audio File' : 'No Audio File'}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
+                  <button onClick={clearFilters} className="px-6 py-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-600 transition-colors">
+                    Reset
+                  </button>
+                  <button onClick={() => { applyFilters(); setShowFilters(false); }} className="px-8 py-2 text-xs font-black uppercase tracking-widest text-white bg-red-600 rounded-xl hover:bg-red-700 shadow-lg shadow-red-100 transition-all active:scale-95">
+                    Apply Pulse
+                  </button>
+                </div>
               </div>
-            </div>
-            {/* U Values */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">U (Difficulty)</label>
-              <div className="max-h-32 overflow-y-auto space-y-1 border rounded p-2 bg-gray-50">
-                {uniqueUs.map(u => (
-                  <label key={u} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={pendingFilters.us.has(u)} onChange={() => toggleFilter('us', u)} className="rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                    {u.toFixed(1)}
-                  </label>
-                ))}
-                {uniqueUs.length === 0 && <span className="text-xs text-gray-400">No data</span>}
-              </div>
-            </div>
-            {/* R Values */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">R (Ohm)</label>
-              <div className="max-h-32 overflow-y-auto space-y-1 border rounded p-2 bg-gray-50">
-                {uniqueRs.map(r => (
-                  <label key={r} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={pendingFilters.rs.has(r)} onChange={() => toggleFilter('rs', r)} className="rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                    {r.toFixed(1)}
-                  </label>
-                ))}
-                {uniqueRs.length === 0 && <span className="text-xs text-gray-400">No data</span>}
-              </div>
-            </div>
-            {/* I Values */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">I (Intensity)</label>
-              <div className="max-h-32 overflow-y-auto space-y-1 border rounded p-2 bg-gray-50">
-                {uniqueIs.map(i => (
-                  <label key={i} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={pendingFilters.is.has(i)} onChange={() => toggleFilter('is', i)} className="rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                    {i.toFixed(1)}
-                  </label>
-                ))}
-                {uniqueIs.length === 0 && <span className="text-xs text-gray-400">No data</span>}
-              </div>
-            </div>
-            {/* Audio Status */}
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Audio Status</label>
-              <select
-                value={pendingFilters.audio}
-                onChange={(e) => toggleFilter('audio', e.target.value)}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-              >
-                <option value="all">All</option>
-                <option value="hasAudio">Has Audio</option>
-                <option value="noAudio">No Audio</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={clearFilters} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-              Clear Filters
-            </button>
-            <button onClick={applyFilters} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700">
-              Apply Filters
-            </button>
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Bulk Actions */}
         {selectedIds.size > 0 && (

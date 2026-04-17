@@ -32,7 +32,12 @@ export default function SettingsTab() {
         const docRef = doc(db, `workspaces/default/settings`, 'ai');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setSettings(docSnap.data() as AISettings);
+          const data = docSnap.data() as AISettings;
+          // Migration: Update old voice ID if found
+          if (data.elevenLabsVoiceId === 'pNInz6obpg8ndclKuztW') {
+            data.elevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
+          }
+          setSettings(data);
         }
       } catch (error) {
         console.error('Error loading settings:', error);

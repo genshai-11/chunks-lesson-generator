@@ -3,7 +3,35 @@ import { collection, onSnapshot, addDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Resource, Chunk, AISettings } from '../types';
 import { generateChunk } from '../services/aiService';
-import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw, Activity, Zap, Cpu, Info } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+const MultiMeter = ({ label, value, unit, colorClass, icon: Icon, description }: { label: string, value: string | number, unit: string, colorClass: string, icon: any, description?: string }) => (
+  <div className="relative group overflow-hidden">
+    <div className={`absolute inset-0 bg-gradient-to-br ${colorClass} opacity-5 group-hover:opacity-10 transition-opacity`} />
+    <div className="relative p-5 rounded-2xl border border-gray-100 bg-white/70 backdrop-blur-md shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-500">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</span>
+          {description && <span className="text-[10px] text-gray-400 font-medium">{description}</span>}
+        </div>
+        <div className={`p-2 rounded-lg ${colorClass} bg-opacity-10`}>
+          <Icon className={`w-4 h-4 ${colorClass.replace('bg-', 'text-')}`} />
+        </div>
+      </div>
+      <div className="flex items-baseline space-x-1">
+        <span className="text-4xl font-black text-gray-900 tabular-nums tracking-tighter">{value}</span>
+        <span className="text-sm font-bold text-gray-400 uppercase tracking-wide">{unit}</span>
+      </div>
+      <div className="mt-4 w-full bg-gray-100 h-1.5 rounded-full overflow-hidden shadow-inner">
+        <div 
+          className={`h-full ${colorClass} transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(0,0,0,0.1)]`} 
+          style={{ width: `${Math.min(100, (Number(value) / 200) * 100)}%` }} 
+        />
+      </div>
+    </div>
+  </div>
+);
 import { ColorCategory } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -34,17 +62,16 @@ const COLOR_STYLES: Record<string, { text: string, bg: string, border: string, t
 };
 
 export default function MixerTab() {
-  const [mode, setMode] = useState<'manual' | 'ai'>('manual');
   const [resources, setResources] = useState<Resource[]>([]);
   const [aiSettings, setAiSettings] = useState<AISettings | undefined>();
   
-  // Manual Mode State
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [iValue, setIValue] = useState<number>(1);
-  const [manualQuantity, setManualQuantity] = useState<number>(1);
-  const [generatedChunks, setGeneratedChunks] = useState<Partial<Chunk>[]>([]);
-  const [manualSavedIndices, setManualSavedIndices] = useState<Set<number>>(new Set());
-  const [regeneratingManualIdx, setRegeneratingManualIdx] = useState<number | null>(null);
+  // Notification State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
   
   // AI Mode State
   const [aiTheme, setAiTheme] = useState('');
@@ -55,6 +82,7 @@ export default function MixerTab() {
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<'Short' | 'Medium' | 'Long'>('Medium');
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
+  const [rFormulaMode, setRFormulaMode] = useState<'circuit' | 'linear'>('circuit');
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -101,116 +129,16 @@ export default function MixerTab() {
     loadSettings();
   }, []);
 
-  const selectedResources = useMemo(() => {
-    return resources.filter(r => selectedIds.has(r.id));
-  }, [resources, selectedIds]);
-
-  const rTotal = useMemo(() => {
-    if (selectedResources.length === 0) return 0;
-
-    // Group by color
-    const groups: Record<string, number[]> = {};
-    selectedResources.forEach(r => {
-      if (!groups[r.color]) groups[r.color] = [];
-      groups[r.color].push(r.ohm);
-    });
-
-    // Series (Same color): R_total = Sum(R)
-    const seriesTotals = Object.values(groups).map(group => 
-      group.reduce((sum, ohm) => sum + ohm, 0)
-    );
-
-    // Parallel/Amplification (Different color): R_total = Product(R)
-    if (seriesTotals.length === 0) return 0;
-    return seriesTotals.reduce((prod, val) => prod * val, 1);
-  }, [selectedResources]);
-
-  const uTotal = useMemo(() => {
-    return iValue * rTotal;
-  }, [iValue, rTotal]);
-
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedIds(newSet);
-  };
-
-  const handleGenerate = async () => {
-    if (selectedResources.length === 0) return;
-    setLoading(true);
-    setGeneratedChunks([]);
-    setManualSavedIndices(new Set());
-
-    try {
-      const newChunks: Partial<Chunk>[] = [];
-      for (let i = 0; i < manualQuantity; i++) {
-        const result = await generateChunk({
-          resources: selectedResources,
-          rTotal,
-          iValue,
-          uTotal,
-          settings: aiSettings
-        });
-
-        let difficultyLabel = 'Beginner';
-        if (uTotal > 20) difficultyLabel = 'Intermediate';
-        if (uTotal > 50) difficultyLabel = 'Advanced';
-        if (uTotal > 100) difficultyLabel = 'Master';
-
-        newChunks.push({
-          resourcesUsed: selectedResources,
-          engSentence: result.engSentence,
-          vieSentence: result.vieSentence,
-          category: result.category,
-          evaluation: (result as any).evaluation,
-          rTotal,
-          iValue,
-          uTotal,
-          difficultyLabel
-        });
-      }
-      setGeneratedChunks(newChunks);
-    } catch (error) {
-      alert("Failed to generate chunks. See console for details.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveManualChunk = async (chunk: Partial<Chunk>, index: number) => {
-    if (!auth.currentUser) return;
-    setSavingIndex(index + 1000); // Offset for manual
-    try {
-      await addDoc(collection(db, `workspaces/default/chunks`), {
-        ...chunk,
-        userId: auth.currentUser.uid,
-        createdAt: new Date().toISOString()
-      });
-      setManualSavedIndices(prev => new Set(prev).add(index));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `workspaces/default/chunks`);
-    } finally {
-      setSavingIndex(null);
-    }
-  };
-
-  const handleRegenerate = async (index: number, type: 'manual' | 'auto') => {
-    const chunk = type === 'manual' ? generatedChunks[index] : draftChunks[index];
+  const handleRegenerate = async (index: number) => {
+    const chunk = draftChunks[index];
     if (!chunk || !chunk.resourcesUsed || !aiSettings) return;
 
-    if (type === 'manual') setRegeneratingManualIdx(index);
-    else {
-      setRegeneratingAutoIdx(index);
-      setDraftChunks(prev => {
-        const next = [...prev];
-        next[index] = { ...next[index], status: 'loading' };
-        return next;
-      });
-    }
+    setRegeneratingAutoIdx(index);
+    setDraftChunks(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], status: 'loading' };
+      return next;
+    });
 
     try {
       const result = await generateChunk({
@@ -221,86 +149,60 @@ export default function MixerTab() {
         settings: aiSettings
       });
 
-      if (type === 'manual') {
-        const newChunkData = {
-          ...chunk,
-          engSentence: result.engSentence,
-          vieSentence: result.vieSentence,
-          category: result.category,
-          evaluation: (result as any).evaluation
+      setDraftChunks(prev => {
+        const next = [...prev];
+        next[index] = {
+          ...next[index],
+          status: 'success',
+          result: {
+            engSentence: result.engSentence,
+            vieSentence: result.vieSentence,
+            category: result.category,
+            evaluation: (result as any).evaluation,
+            difficultyLabel: next[index].result?.difficultyLabel || 'Beginner'
+          }
         };
-        setGeneratedChunks(prev => {
-          const next = [...prev];
-          next[index] = newChunkData;
-          return next;
-        });
-        setManualSavedIndices(prev => {
-          const next = new Set(prev);
-          next.delete(index);
-          return next;
-        });
-      } else {
-        setDraftChunks(prev => {
-          const next = [...prev];
-          next[index] = {
-            ...next[index],
-            status: 'success',
-            result: {
-              engSentence: result.engSentence,
-              vieSentence: result.vieSentence,
-              category: result.category,
-              evaluation: (result as any).evaluation,
-              difficultyLabel: next[index].result?.difficultyLabel || 'Beginner'
-            }
-          };
-          return next;
-        });
-        setSavedIndices(prev => {
-          const next = new Set(prev);
-          next.delete(index);
-          return next;
-        });
-      }
+        return next;
+      });
+      
+      setSavedIndices(prev => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
     } catch (error) {
-      alert("Failed to regenerate chunk. See console for details.");
-      if (type === 'auto') {
-        setDraftChunks(prev => {
-          const next = [...prev];
-          next[index] = { ...next[index], status: 'error' };
-          return next;
-        });
-      }
+      console.error("Failed to regenerate chunk:", error);
+      setDraftChunks(prev => {
+        const next = [...prev];
+        next[index] = { ...next[index], status: 'error' };
+        return next;
+      });
     } finally {
-      if (type === 'manual') setRegeneratingManualIdx(null);
-      else setRegeneratingAutoIdx(null);
+      setRegeneratingAutoIdx(null);
     }
-  };
-
-  const calculateU = (usedResources: Resource[], i: number) => {
-    if (usedResources.length === 0) return 0;
-    const groups: Record<string, number[]> = {};
-    usedResources.forEach(r => {
-      if (!groups[r.color]) groups[r.color] = [];
-      groups[r.color].push(r.ohm);
-    });
-    const seriesTotals = Object.values(groups).map(group => 
-      group.reduce((sum, ohm) => sum + ohm, 0)
-    );
-    const r = seriesTotals.reduce((prod, val) => prod * val, 1);
-    return i * r;
   };
 
   const calculateOhm = (usedResources: Resource[]) => {
     if (usedResources.length === 0) return 0;
+    
+    // Correct Circuit Formula (must match aiService / Audio test):
+    // Same color = ADD (Series)
+    // Different colors = MULTIPLY (Parallel)
     const groups: Record<string, number[]> = {};
     usedResources.forEach(r => {
       if (!groups[r.color]) groups[r.color] = [];
       groups[r.color].push(r.ohm);
     });
-    const seriesTotals = Object.values(groups).map(group => 
+    
+    // Sum within each color group
+    const colorSums = Object.values(groups).map(group => 
       group.reduce((sum, ohm) => sum + ohm, 0)
     );
-    return seriesTotals.reduce((prod, val) => prod * val, 1);
+    
+    // Multiply the sums of different colors
+    const totalOhm = colorSums.reduce((prod, val) => prod * val, 1);
+    
+    return Math.round(totalOhm * 10) / 10;
   };
 
   const handlePrepareBlueprint = () => {
@@ -338,7 +240,7 @@ export default function MixerTab() {
         // Filter by color preferences
         const filteredResources = resources.filter(r => aiColors.length === 0 || aiColors.includes(r.color));
         if (filteredResources.length === 0) {
-          if (i === 0) alert("No resources match your color preferences.");
+          if (i === 0) showToast("No resources match your color preferences.");
           return;
         }
 
@@ -349,46 +251,62 @@ export default function MixerTab() {
         });
         const availableColors = Object.keys(resourcesByColor);
 
+        let bestCombo: Resource[] = [];
+        let bestOhm = 0;
         let attempts = 0;
+        const maxAttempts = 300; // Increased search depth
         
-        // Try to find a good combo
-        while (attempts < 100) {
+        while (attempts < maxAttempts) {
           let testCombo: Resource[] = [];
           
-          const maxColors = availableColors.length;
-          const minColors = Math.min(2, maxColors);
-          const numColorsToMix = Math.floor(Math.random() * (maxColors - minColors + 1)) + minColors;
+          const numColorsToMix = Math.min(
+            availableColors.length, 
+            Math.max(2, Math.floor(Math.random() * availableColors.length) + 1)
+          );
           const shuffledColors = [...availableColors].sort(() => 0.5 - Math.random()).slice(0, numColorsToMix);
 
           shuffledColors.forEach(color => {
             const itemsInColor = resourcesByColor[color];
-            const maxItemsForThisColor = Math.min(aiMaxPerColor, itemsInColor.length);
-            const numItems = Math.floor(Math.random() * maxItemsForThisColor) + 1;
+            // If target is high, temporarily allow more keywords to reach the Ohm goal
+            const effectiveMax = aiTargetOhm > 50 ? Math.max(aiMaxPerColor, 4) : aiMaxPerColor;
+            const limit = Math.min(effectiveMax, itemsInColor.length);
+            const numItems = Math.floor(Math.random() * limit) + 1;
             const shuffledItems = [...itemsInColor].sort(() => 0.5 - Math.random()).slice(0, numItems);
             testCombo.push(...shuffledItems);
           });
 
           const testOhm = calculateOhm(testCombo);
           
-          // If it's the first attempt or this combo is closer to target than the previous best
-          if (attempts === 0 || Math.abs(testOhm - aiTargetOhm) < Math.abs(currentOhm - aiTargetOhm)) {
-            currentCombo = testCombo;
-            currentOhm = testOhm;
+          if (attempts === 0 || Math.abs(testOhm - aiTargetOhm) < Math.abs(bestOhm - aiTargetOhm)) {
+            bestCombo = testCombo;
+            bestOhm = testOhm;
           }
           
-          // If we found a really close match, stop trying
-          if (Math.abs(currentOhm - aiTargetOhm) <= 2) break;
+          if (Math.abs(bestOhm - aiTargetOhm) <= (aiTargetOhm * 0.05)) break; // 5% tolerance
           attempts++;
         }
+        currentCombo = bestCombo;
+        currentOhm = bestOhm;
       }
 
       if (currentCombo.length > 0) {
+        // Dynamic Load (I) calculation based on sentence length
+        let baseI = 1.0;
+        if (aiSentenceLength === 'Short') baseI = 0.8;
+        if (aiSentenceLength === 'Medium') baseI = 1.5;
+        if (aiSentenceLength === 'Long') baseI = 2.5;
+        
+        // Add minimal jitter (+/- 0.2)
+        const jitter = (Math.random() * 0.4) - 0.2;
+        const finalI = Math.max(0.5, Math.round((baseI + jitter) * 10) / 10);
+        const finalU = Math.round((currentOhm * finalI) * 10) / 10;
+
         newDrafts.push({
           id: `draft-${Date.now()}-${i}`,
           resourcesUsed: currentCombo,
           rTotal: currentOhm,
-          iValue: 1, // Default I
-          uTotal: currentOhm * 1,
+          iValue: finalI,
+          uTotal: finalU,
           status: 'draft'
         });
       }
@@ -398,7 +316,7 @@ export default function MixerTab() {
       setDraftChunks(newDrafts);
       setSavedIndices(new Set());
     } else if (blueprintMode === 'recipe') {
-      alert("Could not generate drafts. Please check your recipe and ensure you have resources for the selected colors.");
+      showToast("Could not generate drafts. Please check your recipe and ensure you have resources for the selected colors.");
     }
   };
 
@@ -418,6 +336,8 @@ export default function MixerTab() {
         rTotal: draft.rTotal,
         iValue: draft.iValue,
         uTotal: draft.uTotal,
+        theme: aiTheme,
+        sentenceLength: aiSentenceLength,
         settings: aiSettings
       });
 
@@ -552,256 +472,51 @@ export default function MixerTab() {
     );
   };
 
-  const groupedResources = useMemo(() => {
-    const groups: Record<string, Resource[]> = {};
-    resources.forEach(r => {
-      if (!groups[r.color]) groups[r.color] = [];
-      groups[r.color].push(r);
-    });
-    return groups;
-  }, [resources]);
-
   return (
     <div className="space-y-6">
-      {/* Mode Selector */}
-      <div className="flex bg-gray-100 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setMode('manual')}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${mode === 'manual' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <Settings2 className="w-4 h-4 mr-2" /> Manual Mixer
-        </button>
-        <button
-          onClick={() => setMode('ai')}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${mode === 'ai' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          <Sparkles className="w-4 h-4 mr-2" /> AI Generator
-        </button>
-      </div>
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-20 left-1/2 z-50 px-6 py-3 bg-gray-900 text-white text-sm font-bold rounded-full shadow-2xl"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {mode === 'manual' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-          {/* Left Column: Mixer Controls */}
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">1. Select Resources</h3>
-                {selectedIds.size > 0 && (
-                  <button
-                    onClick={() => setSelectedIds(new Set())}
-                    className="text-xs font-medium text-red-600 hover:text-red-700 transition-colors"
-                  >
-                    Clear Selection
-                  </button>
-                )}
-              </div>
-              {resources.length === 0 ? (
-                <p className="text-sm text-gray-500 p-4 border border-dashed rounded-md text-center">No resources available. Add some in the Resources tab.</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-2">
-                  {(Object.entries(groupedResources) as [string, Resource[]][]).map(([color, resList]) => (
-                    <div key={color} className="space-y-2">
-                      <h4 className={`text-xs font-bold uppercase tracking-wider sticky top-0 py-1 bg-white z-10 ${COLOR_STYLES[color]?.text || 'text-gray-700'}`}>
-                        {color} ({resList.length})
-                      </h4>
-                      <div className="space-y-1.5">
-                        {resList.map(r => (
-                          <label key={r.id} className={`flex items-start p-2 rounded cursor-pointer border transition-colors ${
-                            selectedIds.has(r.id) 
-                              ? `${COLOR_STYLES[color]?.bg || 'bg-gray-50'} ${COLOR_STYLES[color]?.border || 'border-gray-200'}`
-                              : 'bg-white border-gray-100 hover:bg-gray-50'
-                          }`}>
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(r.id)}
-                              onChange={() => toggleSelection(r.id)}
-                              className="mt-0.5 h-3.5 w-3.5 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                            />
-                            <div className="ml-2 flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-900 truncate">{r.name}</p>
-                              <p className="text-[10px] text-gray-500">{r.ohm}Ω</p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">2. Set Context & Quantity</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Current / MSE (I)</label>
-                  <input
-                    type="number"
-                    value={iValue}
-                    onChange={(e) => setIValue(Number(e.target.value))}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                    min="0.1"
-                    step="0.1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input
-                    type="number"
-                    value={manualQuantity}
-                    onChange={(e) => setManualQuantity(Number(e.target.value))}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                    min="1"
-                    max="10"
-                  />
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">Adjust complexity and how many variations to generate.</p>
-            </div>
-
-            <div className="bg-red-50 p-6 rounded-xl shadow-sm border border-red-100">
-              <h3 className="text-lg font-medium text-red-900 mb-4">3. The Semantic Circuit</h3>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-500 font-medium uppercase tracking-wider">Resistance (R)</div>
-                  <div className="mt-1 text-2xl font-bold text-gray-900">{rTotal.toFixed(1)}Ω</div>
-                </div>
-                <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-500 font-medium uppercase tracking-wider">Current (I)</div>
-                  <div className="mt-1 text-2xl font-bold text-gray-900">{iValue.toFixed(1)}A</div>
-                </div>
-                <div className="bg-red-600 p-3 rounded-lg shadow-sm text-white">
-                  <div className="text-xs text-red-200 font-medium uppercase tracking-wider">Voltage (U)</div>
-                  <div className="mt-1 text-2xl font-bold">{uTotal.toFixed(1)}V</div>
-                </div>
-              </div>
-              
-              <button
-                onClick={handleGenerate}
-                disabled={selectedResources.length === 0 || loading}
-                className="mt-6 w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-red-300 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <><Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5" /> Generating...</>
-                ) : (
-                  <><Wand2 className="-ml-1 mr-2 h-5 w-5" /> Generate Chunk</>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column: Results */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Generated Output ({generatedChunks.length})</h3>
-              {generatedChunks.length > 0 && (
-                <button
-                  onClick={() => setGeneratedChunks([])}
-                  className="text-xs font-medium text-gray-500 hover:text-red-600 transition-colors flex items-center"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Clear Results
-                </button>
-              )}
-            </div>
-            
-            {generatedChunks.length > 0 ? (
-              <div className="flex-1 overflow-y-auto space-y-6 pr-2 max-h-[800px]">
-                {generatedChunks.map((chunk, idx) => (
-                  <div key={idx} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-4 relative group">
-                    <div className="absolute top-4 right-4 flex space-x-2">
-                      <button 
-                        onClick={() => handleRegenerate(idx, 'manual')}
-                        disabled={regeneratingManualIdx === idx}
-                        className="p-1.5 text-gray-600 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm disabled:opacity-50"
-                        title="Regenerate this chunk"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${regeneratingManualIdx === idx ? 'animate-spin' : ''}`} />
-                      </button>
-                    </div>
-
-                    <div>
-                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">English</h4>
-                      <p className="text-md text-gray-900 font-medium leading-relaxed">
-                        {chunk.engSentence}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Vietnamese</h4>
-                      <p className="text-sm text-gray-600 italic">
-                        {chunk.vieSentence}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1">
-                      {chunk.resourcesUsed?.map((resource, rIdx) => (
-                        <span 
-                          key={rIdx} 
-                          className={`px-1.5 py-0.5 text-[10px] rounded border font-bold uppercase ${COLOR_STYLES[resource.color]?.tagBg || 'bg-gray-50'} ${COLOR_STYLES[resource.color]?.tagText || 'text-gray-700'} ${COLOR_STYLES[resource.color]?.tagBorder || 'border-gray-200'}`}
-                        >
-                          {resource.name}
-                        </span>
-                      ))}
-                    </div>
-
-                    {(chunk as any).evaluation && (
-                      <div className="bg-green-50 border border-green-100 p-2 rounded text-xs text-green-800 flex items-start">
-                        <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-green-600" />
-                        <span><span className="font-bold">AI Eval:</span> {(chunk as any).evaluation}</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                      <div className="flex space-x-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 uppercase">
-                          {chunk.category}
-                        </span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-600 uppercase">
-                          {chunk.difficultyLabel} (U={chunk.uTotal?.toFixed(1)})
-                        </span>
-                      </div>
-                      
-                      {manualSavedIndices.has(idx) ? (
-                        <span className="text-[10px] font-bold text-green-600 flex items-center">
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Saved
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleSaveManualChunk(chunk, idx)}
-                          disabled={savingIndex === idx + 1000}
-                          className="text-[10px] font-bold text-red-600 hover:text-red-700 flex items-center transition-colors"
-                        >
-                          {savingIndex === idx + 1000 ? (
-                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          ) : (
-                            <Save className="w-3 h-3 mr-1" />
-                          )}
-                          Save to DB
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex-1 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-                <div className="text-center p-6">
-                  <Wand2 className="mx-auto h-12 w-12 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-500">Select resources and click generate to see the AI output here.</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* AI Generator Controls */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-medium text-gray-900 mb-6 flex items-center">
-              <Sparkles className="w-5 h-5 mr-2 text-red-600" /> AI Generation Settings
-            </h3>
+            <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-100">
+              <h3 className="text-xl font-black text-gray-900 flex items-center">
+                <Sparkles className="w-6 h-6 mr-3 text-red-600" />
+                AI Linguistic Blueprinting
+              </h3>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handlePrepareBlueprint}
+                  disabled={loading || !aiTheme}
+                  className="px-6 py-2 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all disabled:opacity-30 flex items-center"
+                >
+                  <Cpu className="w-4 h-4 mr-2" /> 1. Calculate Blueprints
+                </button>
+                {draftChunks.length > 0 && (
+                  <button
+                    onClick={handleExecuteAllPending}
+                    disabled={loading}
+                    className="px-6 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-all disabled:opacity-30 flex items-center shadow-lg shadow-red-200"
+                  >
+                    <Zap className="w-4 h-4 mr-2" /> 2. Execute {draftChunks.filter(d => d.status === 'draft').length} Pulses
+                  </button>
+                )}
+              </div>
+            </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Theme</label>
@@ -836,38 +551,66 @@ export default function MixerTab() {
                 </div>
 
                 {blueprintMode === 'targetOhm' ? (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Ohm (R)</label>
-                      <input
-                        type="number"
-                        value={aiTargetOhm}
-                        onChange={(e) => setAiTargetOhm(Number(e.target.value))}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                        min="5"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Ohm (R)</label>
+                        <input
+                          type="number"
+                          value={aiTargetOhm}
+                          onChange={(e) => setAiTargetOhm(Number(e.target.value))}
+                          className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm font-bold"
+                          min="5"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Quantity</label>
+                        <input
+                          type="number"
+                          value={aiQuantity}
+                          onChange={(e) => setAiQuantity(Number(e.target.value))}
+                          className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm font-bold"
+                          min="1"
+                          max="50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Items/Color</label>
+                        <input
+                          type="number"
+                          value={aiMaxPerColor}
+                          onChange={(e) => setAiMaxPerColor(Number(e.target.value))}
+                          className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm font-bold"
+                          min="1"
+                          max="5"
+                        />
+                      </div>
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        value={aiQuantity}
-                        onChange={(e) => setAiQuantity(Number(e.target.value))}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                        min="1"
-                        max="50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Items/Color</label>
-                      <input
-                        type="number"
-                        value={aiMaxPerColor}
-                        onChange={(e) => setAiMaxPerColor(Number(e.target.value))}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                        min="1"
-                        max="5"
-                      />
+                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Calculation Formula</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setRFormulaMode('circuit')}
+                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                            rFormulaMode === 'circuit'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
+                              : 'bg-white text-gray-400 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          Series-Parallel
+                        </button>
+                        <button
+                          onClick={() => setRFormulaMode('linear')}
+                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                            rFormulaMode === 'linear'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100'
+                              : 'bg-white text-gray-400 border-gray-200 hover:border-emerald-300'
+                          }`}
+                        >
+                          Linear Sum
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -909,14 +652,27 @@ export default function MixerTab() {
                   </div>
                 )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sentence Length</label>
-                  <div className="flex bg-gray-100 p-1 rounded-md">
+                  <label className="flex items-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                    Sentence Length
+                    <div className="group relative ml-2">
+                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal">
+                         <div className="space-y-2">
+                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span><br/>1-2 clauses, direct and concise. Focuses purely on embedding the keywords.</div>
+                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span><br/>Standard conversational sentence, balanced context and detail.</div>
+                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span><br/>Complex structures, multiple clauses, storytelling, rich context.</div>
+                         </div>
+                         <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                       </div>
+                    </div>
+                  </label>
+                  <div className="flex bg-gray-100/50 p-1 rounded-xl">
                     {(['Short', 'Medium', 'Long'] as const).map((len) => (
                       <button
                         key={len}
                         onClick={() => setAiSentenceLength(len)}
-                        className={`flex-1 py-1.5 text-xs font-medium rounded transition-all ${
-                          aiSentenceLength === len ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                          aiSentenceLength === len ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
                         }`}
                       >
                         {len}
@@ -927,25 +683,37 @@ export default function MixerTab() {
               </div>
 
               {blueprintMode === 'targetOhm' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Color Preferences</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => toggleAiColor(color as ColorCategory)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-md border text-sm transition-all ${
-                          aiColors.includes(color as ColorCategory)
-                            ? 'bg-red-50 border-red-200 text-red-700 font-medium'
-                            : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                        }`}
-                      >
-                        {color}
-                        {aiColors.includes(color as ColorCategory) && <CheckCircle2 className="w-4 h-4" />}
-                      </button>
-                    ))}
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Color Focus Preferences</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => toggleAiColor(color as ColorCategory)}
+                          className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                            aiColors.includes(color as ColorCategory)
+                              ? 'bg-red-50 border-red-200 text-red-600'
+                              : 'bg-white border-gray-200 text-gray-400 hover:border-red-200 shadow-sm'
+                          }`}
+                        >
+                          {color}
+                          {aiColors.includes(color as ColorCategory) && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-[10px] text-gray-400 font-bold uppercase tracking-wide italic">The AI will prioritize resources from these color groups.</p>
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">The AI will prioritize resources from these categories.</p>
+                  
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <Zap className="w-4 h-4 text-red-600" />
+                      <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Logic Engine</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
+                      Topic, colors, and R-values are combined to generate precise linguistic blueprints before execution.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -959,194 +727,175 @@ export default function MixerTab() {
             </button>
           </div>
 
-          {/* AI Results List */}
+          {/* AI Results Pipeline */}
           {draftChunks.length > 0 && (
-            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
               <div className="flex items-center justify-between px-2">
-                <h3 className="text-lg font-medium text-gray-900">Draft Chunks ({draftChunks.length})</h3>
+                <div className="flex flex-col">
+                  <h3 className="text-xl font-black text-gray-900 flex items-center">
+                    <Cpu className="w-5 h-5 mr-3 text-gray-400" />
+                    Blueprint Selection Pipeline
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                    Measurable Semantic Loads Ready for Execution
+                  </p>
+                </div>
                 <div className="flex space-x-2">
                   <button
                     onClick={handleExecuteAllPending}
                     disabled={loading || draftChunks.every(d => d.status === 'success')}
-                    className="flex items-center px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 transition-colors disabled:bg-red-300"
+                    className="flex items-center px-6 py-2.5 bg-red-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red-700 transition-all shadow-xl shadow-red-200 disabled:opacity-30"
                   >
-                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                    2. Generate All Pending
+                    {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                    Ignite Pipeline
                   </button>
                   <button
                     onClick={handleSaveAll}
                     disabled={saving || draftChunks.filter(d => d.status === 'success' && !savedIndices.has(draftChunks.indexOf(d))).length === 0}
-                    className="flex items-center px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-300"
+                    className="flex items-center px-4 py-2.5 bg-green-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all disabled:opacity-30 shadow-lg shadow-green-100"
                   >
                     {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                    Save All Unsaved
+                    Save All
+                  </button>
+                  <button
+                    onClick={() => setDraftChunks([])}
+                    className="p-2.5 text-gray-400 hover:text-red-600 transition-colors"
+                  >
+                    <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
               </div>
               
               {loading && generationProgress.total > 0 && (
-                <div className="mt-2 animate-in fade-in duration-300 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                  <div className="flex justify-between text-xs font-medium text-gray-500 mb-1.5">
-                    <span>Generation Progress</span>
-                    <span>{Math.round((generationProgress.current / generationProgress.total) * 100)}%</span>
+                <div className="animate-in fade-in duration-300 bg-white p-6 rounded-2xl border border-gray-100 shadow-xl overflow-hidden relative">
+                  <div className="absolute top-0 left-0 h-1 bg-red-600 transition-all duration-500" style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }} />
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-xs font-black text-gray-900 uppercase">Mass Calibrating...</span>
+                    <span className="text-xs font-black text-red-600">{Math.round((generationProgress.current / generationProgress.total) * 100)}%</span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="bg-red-500 h-2 rounded-full transition-all duration-500 ease-out" 
-                      style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
-                    />
+                  <div className="flex space-x-1">
+                    {Array.from({ length: generationProgress.total }).map((_, i) => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${i < generationProgress.current ? 'bg-red-600' : 'bg-gray-100'}`} />
+                    ))}
                   </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
                 {draftChunks.map((draft, idx) => (
-                  <div key={draft.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col hover:shadow-md transition-shadow relative group">
-                    <div className="flex flex-col md:flex-row gap-6">
-                      
-                      {/* Left: Blueprint / Resources */}
-                      <div className="md:w-1/3 space-y-3 border-r border-gray-100 pr-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Draft #{idx + 1}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700">
-                            {draft.rTotal.toFixed(1)} Ω
-                          </span>
+                  <div key={draft.id} className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-red-200 transition-all duration-500 hover:shadow-2xl">
+                    <div className="flex">
+                      {/* Left Sidebar: Metrics */}
+                      <div className="w-24 bg-gray-50/50 border-r border-gray-100 p-4 flex flex-col items-center justify-center space-y-4">
+                        <div className="text-center">
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Load</span>
+                          <div className="text-sm font-black text-gray-900">{draft.rTotal.toFixed(0)}Ω</div>
                         </div>
-                        
-                        <div className="flex flex-wrap gap-1.5">
-                          {draft.resourcesUsed.map((resource, rIdx) => (
-                            <span 
-                              key={rIdx} 
-                              className={`px-2 py-1 text-[10px] rounded border font-bold uppercase flex items-center ${
-                                resource.color === 'Green' ? 'bg-green-50 text-green-700 border-green-100' :
-                                resource.color === 'Blue' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                resource.color === 'Red' ? 'bg-red-50 text-red-700 border-red-100' :
-                                resource.color === 'Pink' ? 'bg-pink-50 text-pink-700 border-pink-100' :
-                                resource.color === 'Yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
-                                resource.color === 'Orange' ? 'bg-orange-50 text-orange-700 border-orange-100' :
-                                'bg-purple-50 text-purple-700 border-purple-100'
-                              }`}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: resource.color.toLowerCase() }}></span>
-                              {resource.name} ({resource.ohm}Ω)
-                            </span>
+                        <div className="w-full h-px bg-gray-200" />
+                        <div className="flex flex-col space-y-1">
+                          {Array.from(new Set(draft.resourcesUsed.map(r => r.color))).map((color: any) => (
+                            <div 
+                              key={color} 
+                              className={`w-2 h-2 mx-auto rounded-full shadow-sm border border-white/50 ${
+                                color === 'Green' ? 'bg-green-500' :
+                                color === 'Blue' ? 'bg-blue-500' :
+                                color === 'Red' ? 'bg-red-500' :
+                                color === 'Pink' ? 'bg-pink-500' :
+                                color === 'Yellow' ? 'bg-yellow-500' :
+                                color === 'Orange' ? 'bg-orange-500' :
+                                color === 'Purple' ? 'bg-purple-500' :
+                                'bg-gray-400'
+                              }`} 
+                              title={color} 
+                            />
                           ))}
                         </div>
-                        
-                        {draft.status === 'draft' || draft.status === 'error' ? (
-                          <button
-                            onClick={() => handleExecuteDraft(idx)}
-                            disabled={draft.status === 'loading'}
-                            className="w-full mt-4 flex justify-center items-center py-2 px-4 border border-red-200 rounded-md text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Generate
-                          </button>
-                        ) : null}
                       </div>
 
-                      {/* Right: Result */}
-                      <div className="md:w-2/3 flex flex-col justify-center">
-                        {draft.status === 'draft' ? (
-                          <div className="text-center text-gray-400 py-8">
-                            <Wand2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">Waiting to generate...</p>
-                          </div>
-                        ) : draft.status === 'loading' ? (
-                          <div className="text-center text-red-500 py-8">
-                            <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin" />
-                            <p className="text-sm font-medium">AI is thinking...</p>
-                          </div>
-                        ) : draft.status === 'error' ? (
-                          <div className="text-center text-red-500 py-8 bg-red-50 rounded-lg border border-red-100">
-                            <p className="text-sm font-medium">Failed to generate.</p>
-                            <p className="text-xs mt-1">Please try again.</p>
-                          </div>
-                        ) : draft.result ? (
-                          <div className="space-y-4 relative">
-                            <div className="absolute top-0 right-0 flex space-x-2">
-                              <button 
-                                onClick={() => handleRegenerate(idx, 'auto')}
-                                disabled={regeneratingAutoIdx === idx}
-                                className="p-1.5 text-gray-600 hover:bg-gray-200 rounded-full transition-colors bg-white shadow-sm disabled:opacity-50"
-                                title="Regenerate this chunk"
-                              >
-                                <RefreshCw className={`w-4 h-4 ${regeneratingAutoIdx === idx ? 'animate-spin' : ''}`} />
-                              </button>
-                            </div>
+                      {/* Main Area */}
+                      <div className="flex-1 p-6">
+                        <div className="flex flex-wrap gap-1.5 mb-6">
+  {draft.resourcesUsed.map((r, ri) => (
+    <span 
+      key={ri} 
+      className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border ${
+        COLOR_STYLES[r.color]?.tagBg || 'bg-gray-100'
+      } ${
+        COLOR_STYLES[r.color]?.tagText || 'text-gray-500'
+      } ${
+        COLOR_STYLES[r.color]?.tagBorder || 'border-gray-200'
+      }`}
+    >
+      {r.name}
+    </span>
+  ))}
+</div>
 
-                            <div className="pr-16">
-                              {editingIndex === idx ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    value={draft.result.engSentence}
-                                    onChange={(e) => handleUpdateResult(idx, 'engSentence', e.target.value)}
-                                    className="w-full text-sm border-gray-200 rounded-md focus:ring-red-500 focus:border-red-500 p-2"
-                                    rows={2}
-                                  />
-                                  <textarea
-                                    value={draft.result.vieSentence}
-                                    onChange={(e) => handleUpdateResult(idx, 'vieSentence', e.target.value)}
-                                    className="w-full text-xs text-gray-500 border-gray-200 rounded-md focus:ring-red-500 focus:border-red-500 p-2"
-                                    rows={2}
-                                  />
-                                  <button 
-                                    onClick={() => setEditingIndex(null)}
-                                    className="text-[10px] font-bold text-red-600 hover:underline"
-                                  >
-                                    Done Editing
+                        <div className="min-h-[140px] flex flex-col justify-center">
+                          {draft.status === 'draft' ? (
+                            <button 
+                              onClick={() => handleExecuteDraft(idx)}
+                              className="w-full py-10 border-2 border-dashed border-gray-100 rounded-2xl hover:bg-red-50/30 hover:border-red-200 transition-all flex flex-col items-center group/btn"
+                            >
+                              <Zap className="w-8 h-8 text-gray-200 group-hover/btn:text-red-500 mb-3 transition-colors" />
+                              <span className="text-[10px] font-black text-gray-400 group-hover/btn:text-red-600 uppercase tracking-widest">Execute Pulse</span>
+                            </button>
+                          ) : draft.status === 'loading' ? (
+                            <div className="text-center py-10">
+                              <Loader2 className="w-10 h-10 mx-auto text-red-500 animate-spin mb-4" />
+                              <span className="text-[10px] font-black text-red-600 uppercase tracking-widest animate-pulse">Computing...</span>
+                            </div>
+                          ) : draft.status === 'error' ? (
+                            <div className="text-center py-10 bg-red-50 rounded-2xl">
+                              <Activity className="w-8 h-8 mx-auto text-red-400 mb-2" />
+                              <p className="text-xs font-black text-red-600 uppercase">Input Failed</p>
+                              <button onClick={() => handleExecuteDraft(idx)} className="text-[8px] font-bold text-red-400 underline mt-2 uppercase tracking-widest">Retry Pulse</button>
+                            </div>
+                          ) : draft.result ? (
+                            <div className="space-y-4 animate-in fade-in zoom-in-95 duration-500">
+                              <div className="relative">
+                                <p className="text-lg font-bold text-gray-900 leading-tight">
+                                  {draft.result.engSentence}
+                                </p>
+                                <p className="text-sm text-gray-400 mt-2 font-medium italic">
+                                  {draft.result.vieSentence}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                                <div className="flex space-x-2">
+                                  <span className="px-2 py-0.5 rounded text-[8px] font-black bg-blue-50 text-blue-600 uppercase tracking-widest border border-blue-100">
+                                    {draft.result.category}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border ${
+                                    draft.result.difficultyLabel === 'Beginner' ? 'bg-green-50 text-green-600 border-green-100' :
+                                    draft.result.difficultyLabel === 'Intermediate' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                    draft.result.difficultyLabel === 'Advanced' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                    'bg-red-50 text-red-600 border-red-100'
+                                  }`}>
+                                    {draft.result.difficultyLabel}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                  <button onClick={() => handleRegenerate(idx)} className="text-gray-400 hover:text-red-600 transition-colors">
+                                    <RefreshCw className="w-4 h-4" />
                                   </button>
-                                </div>
-                              ) : (
-                                <div onClick={() => setEditingIndex(idx)} className="cursor-text hover:bg-gray-50 p-1 rounded transition-colors">
-                                  <p className="text-md font-medium text-gray-900 leading-relaxed">{draft.result.engSentence}</p>
-                                  <p className="text-sm text-gray-500 mt-1 italic">{draft.result.vieSentence}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            {draft.result.evaluation && (
-                              <div className="bg-green-50 border border-green-100 p-2 rounded text-xs text-green-800 flex items-start">
-                                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-green-600" />
-                                <span><span className="font-bold">AI Eval:</span> {draft.result.evaluation}</span>
-                              </div>
-                            )}
-
-                            <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                              <div className="flex space-x-2">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 uppercase">
-                                  {draft.result.category}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                  draft.result.difficultyLabel === 'Beginner' ? 'bg-green-100 text-green-700' :
-                                  draft.result.difficultyLabel === 'Intermediate' ? 'bg-blue-100 text-blue-700' :
-                                  draft.result.difficultyLabel === 'Advanced' ? 'bg-orange-100 text-orange-700' :
-                                  'bg-red-100 text-red-700'
-                                }`}>
-                                  {draft.result.difficultyLabel}
-                                </span>
-                              </div>
-                              
-                              {savedIndices.has(idx) ? (
-                                <span className="text-[10px] font-bold text-green-600 flex items-center">
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Saved
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => handleSaveAIChunk(draft, idx)}
-                                  disabled={savingIndex === idx}
-                                  className="text-[10px] font-bold text-red-600 hover:text-red-700 flex items-center transition-colors"
-                                >
-                                  {savingIndex === idx ? (
-                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  {savedIndices.has(idx) ? (
+                                    <CheckCircle2 className="w-5 h-5 text-green-500" />
                                   ) : (
-                                    <Save className="w-3 h-3 mr-1" />
+                                    <button 
+                                      onClick={() => handleSaveAIChunk(draft, idx)} 
+                                      disabled={savingIndex === idx}
+                                      className="flex items-center text-[10px] font-black text-red-600 uppercase hover:underline disabled:opacity-30"
+                                    >
+                                      {savingIndex === idx ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                    </button>
                                   )}
-                                  Save to DB
-                                </button>
-                              )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ) : null}
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1155,7 +904,6 @@ export default function MixerTab() {
             </div>
           )}
         </div>
-      )}
     </div>
   );
 }

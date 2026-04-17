@@ -9,6 +9,8 @@ export interface GenerateChunkParams {
   rTotal: number;
   iValue: number;
   uTotal: number;
+  theme?: string;
+  sentenceLength?: 'Short' | 'Medium' | 'Long';
   settings?: AISettings;
 }
 
@@ -79,13 +81,15 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   return response.text ? response.text.trim() : '';
 }
 
-export async function analyzeTranscript(transcript: string, settings?: AISettings): Promise<OhmAnalysisResult> {
+export async function analyzeTranscript(transcript: string, settings?: AISettings, baseOhms?: Record<string, number>): Promise<OhmAnalysisResult> {
+  const ohms = baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+  
   const prompt = `
 You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:
-- GREEN (5 Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
-- BLUE (7 Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
-- RED (9 Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
-- PINK (3 Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").
+- GREEN (${ohms.Green} Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
+- BLUE (${ohms.Blue} Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
+- RED (${ohms.Red} Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
+- PINK (${ohms.Pink} Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").
 
 CRITICAL RULES FOR CHUNKING:
 1. DO NOT classify every word or sentence. Most of the transcript is just normal speech and MUST BE IGNORED.
@@ -97,12 +101,12 @@ CRITICAL RULES FOR CHUNKING:
 7. Estimate a confidence score between 0.0 and 1.0.
 
 Rules for Ohm calculation:
-- GREEN = 5, BLUE = 7, RED = 9, PINK = 3.
+- GREEN = ${ohms.Green}, BLUE = ${ohms.Blue}, RED = ${ohms.Red}, PINK = ${ohms.Pink}.
 - If multiple chunks have the SAME label, ADD their values.
 - If chunks have DIFFERENT labels, MULTIPLY the group sums.
-Example 1: 1 GREEN, 1 BLUE -> 5 * 7 = 35
-Example 2: 2 GREENs, 1 RED -> (5 + 5) * 9 = 90
-Example 3: 1 RED, 2 PINKs -> 9 * (3 + 3) = 54
+Example 1: 1 GREEN, 1 BLUE -> ${ohms.Green} * ${ohms.Blue} = ${ohms.Green * ohms.Blue}
+Example 2: 2 GREENs, 1 RED -> (${ohms.Green} + ${ohms.Green}) * ${ohms.Red} = ${(ohms.Green + ohms.Green) * ohms.Red}
+Example 3: 1 RED, 2 PINKs -> ${ohms.Red} * (${ohms.Pink} + ${ohms.Pink}) = ${ohms.Red * (ohms.Pink + ohms.Pink)}
 
 Transcript:
 "${transcript}"
@@ -274,12 +278,15 @@ function cleanJSON(text: string): string {
 }
 
 export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
-  const { resources, rTotal, iValue, uTotal, settings } = params;
+  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
   const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
 
-  const prompt = `
+const prompt = `
 You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
-Your task is to generate a bilingual sentence (English and Vietnamese) based on a set of input resources and a specific algorithm.
+Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
+
+Target Theme/Topic: ${theme || 'General Conversation'}
+Desired Sentence Length: ${sentenceLength || 'Medium'}
 
 Algorithm Context:
 - U = I * R
@@ -291,20 +298,26 @@ Input Resources to include in the sentence:
 ${resourceList}
 
 Instructions:
-1. Create a natural-sounding English sentence that meaningfully incorporates ALL the provided input resources.
-2. The sentence complexity should reflect the U (Voltage) value: ${uTotal}.
-3. Provide an accurate and natural Vietnamese translation.
-4. Assign a thematic category (e.g., "Daily Life", "Business").
+1. Primary Goal (Vietnamese First): Start by coming up with a highly natural, meaningful, and contextually logical Vietnamese sentence (or paragraph) that accurately incorporates the exact meaning of all the input resources. Do NOT just list them. Think deeply to create a coherent scenario.
+2. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
+3. Length Calibration: Strictly follow the length constraints: 
+   - "Short": Single concise sentence.
+   - "Medium": About 2 connected sentences.
+   - "Long": A short paragraph of 3 to 4 sentences.
+   You must produce a "${sentenceLength || 'Medium'}" length output.
+4. Theme Adherence: The context MUST strictly revolve around the theme: ${theme || 'General'}.
+5. Energy Level: The structural complexity and vocabulary choice should reflect the U (Voltage) value: ${uTotal}. Higher U means more sophisticated grammar and nuanced meaning.
+6. Classification: Assign a relevant thematic category.
+7. Output Format: Return ONLY JSON. Ensure the final output is meaningful and accurately uses the input parameters.
 
 Output MUST be strictly in the following JSON format:
 {
   "engSentence": "...",
   "vieSentence": "...",
   "category": "...",
-  "evaluation": "Passed: Natural and meaningful."
+  "evaluation": "Explanation of how the resources create a meaningful context matching the U: ${uTotal}"
 }
 `;
-
   const responseText = await callAI(prompt, settings);
   const cleanText = cleanJSON(responseText);
   try {
@@ -331,13 +344,13 @@ export async function generateAutoChunks(params: AutoGenerateParams): Promise<Au
     ohm: r.ohm
   }));
 
-  const prompt = `
+const prompt = `
 You are a Master Linguistic Architect for the "CHUNKS" EdTech system.
 Your mission is to construct ${quantity} high-quality learning chunks.
 
 Theme: ${theme}
 Target Voltage (U): ${targetU}
-Sentence Length: ${sentenceLength}
+Sentence Length: ${sentenceLength} ("Short": 1 sentence, "Medium": 2 sentences, "Long": 3-4 sentences)
 Color Preferences: ${colorPreferences.join(', ')}
 
 Available Ingredients (Resources):
@@ -349,9 +362,9 @@ Physics Logic:
 
 Construction Flow:
 1. Resource Selection: Pick 2-4 resources that mathematically approach the Target U.
-2. Drafting: Create a natural English sentence using the resources.
-3. Translation: Provide a natural Vietnamese translation.
-4. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is it natural? If not, REGENERATE.
+2. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the resources.
+3. English Translation: Translate that Vietnamese concept into natural English.
+4. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length appropriate? If not, REGENERATE.
 5. Final Validation: Ensure all resources used are from the provided list.
 
 Output strictly as JSON array:

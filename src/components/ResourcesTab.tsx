@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Resource, ColorCategory } from '../types';
-import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X } from 'lucide-react';
+import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2 } from 'lucide-react';
 import Papa from 'papaparse';
+import { motion, AnimatePresence } from 'motion/react';
 import { rawNuanceData } from '../data/nuanceData';
-import { updateDoc } from 'firebase/firestore';
 
 export default function ResourcesTab() {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -28,13 +28,54 @@ export default function ResourcesTab() {
   const [editData, setEditData] = useState<Partial<Resource>>({});
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [baseOhms, setBaseOhms] = useState<Partial<Record<ColorCategory, number>>>({
+    Green: 5, Blue: 7, Pink: 3, Red: 9
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [savingOhms, setSavingOhms] = useState(false);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   useEffect(() => {
-    if (color === 'Pink') setOhm(3);
-    else if (color === 'Green') setOhm(5);
-    else if (color === 'Blue') setOhm(7);
-    else if (color === 'Red') setOhm(9);
-  }, [color]);
+    if (!auth.currentUser) return;
+    const loadOhms = async () => {
+      try {
+        const docRef = doc(db, 'workspaces/default/settings', 'baseOhms');
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setBaseOhms(prev => ({ ...prev, ...(snap.data() as Record<ColorCategory, number>) }));
+        }
+      } catch (e) {
+        console.error("Failed to load base ohms settings", e);
+      }
+    };
+    loadOhms();
+  }, []);
+
+  const handleSaveBaseOhms = async () => {
+    if (!auth.currentUser) return;
+    setSavingOhms(true);
+    try {
+      const docRef = doc(db, 'workspaces/default/settings', 'baseOhms');
+      await setDoc(docRef, baseOhms, { merge: true });
+      showToast('Base Ohms saved successfully.');
+      setShowSettings(false);
+    } catch (e) {
+      showToast('Error saving Base Ohms.');
+    } finally {
+      setSavingOhms(false);
+    }
+  };
+
+  useEffect(() => {
+    setOhm(baseOhms[color] || '');
+  }, [color, baseOhms]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -120,21 +161,42 @@ export default function ResourcesTab() {
 
   const handleBulkDelete = async () => {
     if (!auth.currentUser || selectedIds.size === 0) return;
+    
+    setConfirmModal({
+      title: 'Delete Selected',
+      message: `Are you sure you want to delete ${selectedIds.size} selected resources?`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setLoading(true);
+        try {
+          const batchSize = 400;
+          let count = 0;
+          let currentBatch = writeBatch(db);
 
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      selectedIds.forEach(id => {
-        const docRef = doc(db, `workspaces/default/resources`, id);
-        batch.delete(docRef);
-      });
-      await batch.commit();
-      setSelectedIds(new Set());
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
-    } finally {
-      setLoading(false);
-    }
+          for (const id of selectedIds) {
+            const docRef = doc(db, `workspaces/default/resources`, id);
+            currentBatch.delete(docRef);
+            count++;
+
+            if (count % batchSize === 0) {
+              await currentBatch.commit();
+              currentBatch = writeBatch(db);
+            }
+          }
+
+          if (count % batchSize !== 0) {
+            await currentBatch.commit();
+          }
+
+          setSelectedIds(new Set());
+          showToast(`Deleted ${count} resources.`);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   const handleClearAll = async () => {
@@ -226,7 +288,7 @@ export default function ResourcesTab() {
       if (count % batchSize !== 0) {
         await currentBatch.commit();
       }
-      alert(`Removed ${duplicates.length} duplicates.`);
+      showToast(`Removed ${duplicates.length} duplicates.`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
     } finally {
@@ -237,43 +299,46 @@ export default function ResourcesTab() {
   const handleUpdateOhms = async () => {
     if (!auth.currentUser || resources.length === 0) return;
     
-    const confirmUpdate = window.confirm("Are you sure you want to update all existing resources to the new Ohm values (Pink: 3, Green: 5, Blue: 7, Red: 9)?");
-    if (!confirmUpdate) return;
+    setConfirmModal({
+      title: 'Update All Ohm Values',
+      message: `Are you sure you want to update all existing resources to match the configured Base Ohm values?`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setLoading(true);
+        try {
+          const batchSize = 400;
+          let count = 0;
+          let currentBatch = writeBatch(db);
 
-    setLoading(true);
-    try {
-      const batchSize = 400;
-      let count = 0;
-      let currentBatch = writeBatch(db);
+          for (const res of resources) {
+            let newOhm = res.ohm;
+            if (baseOhms[res.color] !== undefined) {
+              newOhm = baseOhms[res.color];
+            }
 
-      for (const res of resources) {
-        let newOhm = res.ohm;
-        if (res.color === 'Pink') newOhm = 3;
-        else if (res.color === 'Green') newOhm = 5;
-        else if (res.color === 'Blue') newOhm = 7;
-        else if (res.color === 'Red') newOhm = 9;
+            if (newOhm !== res.ohm) {
+              const docRef = doc(db, `workspaces/default/resources`, res.id);
+              currentBatch.update(docRef, { ohm: newOhm });
+              count++;
 
-        if (newOhm !== res.ohm) {
-          const docRef = doc(db, `workspaces/default/resources`, res.id);
-          currentBatch.update(docRef, { ohm: newOhm });
-          count++;
-
-          if (count % batchSize === 0) {
-            await currentBatch.commit();
-            currentBatch = writeBatch(db);
+              if (count % batchSize === 0) {
+                await currentBatch.commit();
+                currentBatch = writeBatch(db);
+              }
+            }
           }
+
+          if (count % batchSize !== 0) {
+            await currentBatch.commit();
+          }
+          showToast(`Successfully updated Ohms for ${count} resources.`);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
+        } finally {
+          setLoading(false);
         }
       }
-
-      if (count % batchSize !== 0) {
-        await currentBatch.commit();
-      }
-      alert(`Successfully updated Ohms for ${count} resources.`);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleAddResource = async (e: React.FormEvent) => {
@@ -350,10 +415,10 @@ export default function ResourcesTab() {
       
       for (const row of validRows) {
         const mappings = [
-          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 5 },
-          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 7 },
-          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 9 },
-          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 3 },
+          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: baseOhms.Green ?? 5 },
+          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: baseOhms.Blue ?? 7 },
+          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: baseOhms.Red ?? 9 },
+          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: baseOhms.Pink ?? 3 },
         ];
 
         for (const map of mappings) {
@@ -370,7 +435,7 @@ export default function ResourcesTab() {
       setStagedResources(newStaged);
     } catch (error) {
       console.error("Import error:", error);
-      alert("Failed to parse nuance data.");
+      showToast("Failed to parse nuance data.");
     } finally {
       setImporting(false);
     }
@@ -406,10 +471,10 @@ export default function ResourcesTab() {
       
       for (const row of validRows) {
         const mappings = [
-          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: 5 },
-          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: 7 },
-          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: 9 },
-          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: 3 },
+          { key: 'GREEN (Gap fillers)\n...,\n3 Ohm', color: 'Green' as ColorCategory, ohm: baseOhms.Green ?? 5 },
+          { key: 'BLUE (Sentence)\n...\n5 Ohm', color: 'Blue' as ColorCategory, ohm: baseOhms.Blue ?? 7 },
+          { key: 'RED (Idioms)\n" "\n7 Ohm', color: 'Red' as ColorCategory, ohm: baseOhms.Red ?? 9 },
+          { key: "PINK (Key terms)\n' '\n1 Ohm", color: 'Pink' as ColorCategory, ohm: baseOhms.Pink ?? 3 },
         ];
 
         let foundCustom = false;
@@ -439,7 +504,7 @@ export default function ResourcesTab() {
       setStagedResources(newStaged);
     } catch (error) {
       console.error("URL Import error:", error);
-      alert("Failed to import from URL. Make sure the sheet is public.");
+      showToast("Failed to import from URL. Make sure the sheet is public.");
     } finally {
       setImporting(false);
     }
@@ -473,11 +538,11 @@ export default function ResourcesTab() {
         await currentBatch.commit();
       }
 
-      alert(`Successfully imported ${count} resources!`);
+      showToast(`Successfully imported ${count} resources!`);
       setStagedResources([]);
     } catch (error) {
       console.error("Confirm import error:", error);
-      alert("Failed to save resources.");
+      showToast("Failed to save resources.");
     } finally {
       setImporting(false);
     }
@@ -534,8 +599,108 @@ export default function ResourcesTab() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Confirmation Modals */}
+    <div className="space-y-6 relative">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-20 left-1/2 z-50 px-6 py-3 bg-gray-900 text-white text-sm font-bold rounded-full shadow-2xl"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Base Ohms Settings */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6">
+        <button 
+          onClick={() => setShowSettings(!showSettings)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <div className="flex items-center">
+            <Settings2 className="w-5 h-5 text-gray-500 mr-2" />
+            <h3 className="text-lg font-medium text-gray-900">Base Ohm Configuration</h3>
+          </div>
+          <span className="text-sm font-medium text-red-600 hover:text-red-700">
+            {showSettings ? 'Hide Settings' : 'Edit Defaults'}
+          </span>
+        </button>
+
+        <AnimatePresence>
+          {showSettings && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {(['Green', 'Blue', 'Pink', 'Red'] as ColorCategory[]).map(cColor => (
+                  <div key={cColor} className="flex flex-col">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{cColor}</label>
+                    <div className="flex items-center rounded-md border border-gray-300 overflow-hidden focus-within:ring-1 focus-within:ring-red-500 focus-within:border-red-500">
+                      <input 
+                        type="number"
+                        value={baseOhms[cColor] ?? ''}
+                        onChange={(e) => setBaseOhms(prev => ({ ...prev, [cColor]: Number(e.target.value) }))}
+                        className="w-full px-3 py-2 text-sm focus:outline-none"
+                        step="0.1"
+                      />
+                      <span className="bg-gray-50 px-2 py-2 text-xs font-bold text-gray-400 border-l border-gray-200">Ω</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleSaveBaseOhms}
+                  disabled={savingOhms}
+                  className="flex items-center px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {savingOhms ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                  Save Defaults
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Dynamic Confirm Modal */}
+      <AnimatePresence>
+        {confirmModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-100"
+            >
+              <h3 className="text-lg font-black text-gray-900 mb-2">{confirmModal.title}</h3>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">{confirmModal.message}</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmModal.onConfirm}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-lg shadow-red-200 transition-colors"
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Direct Delete Confirm Modals (Legacy support for mapping over items) */}
       {showClearConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
