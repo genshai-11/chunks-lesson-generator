@@ -442,6 +442,141 @@ export default function SettingsTab() {
           </div>
         </div>
       </div>
+
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-xl font-bold text-gray-900 flex items-center">
+            <Sparkles className="w-6 h-6 mr-2 text-red-600" /> Ohm Analysis Configuration (analyzeTranscript)
+          </h3>
+          <button
+            onClick={async () => {
+              if (!auth.currentUser) return;
+              setSaving(true);
+              try {
+                const docRef = doc(db, `workspaces/default/settings`, 'ai');
+                await setDoc(docRef, {
+                  ohmPromptInstructions: settings.ohmPromptInstructions || null,
+                  ohmBaseValues: settings.ohmBaseValues || null,
+                }, { merge: true });
+                alert('Ohm Analysis Configuration saved successfully!');
+              } catch (error) {
+                console.error('Error saving Ohm Analysis settings:', error);
+                alert('Failed to save Ohm Analysis settings.');
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+            className="flex items-center px-6 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all disabled:bg-red-300 shadow-lg shadow-red-100"
+          >
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save Ohm Config
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6 md:col-span-2">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-bold text-gray-700 flex items-center">
+                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> Custom System Prompt (Instructions for LLM)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const defaultPrompt = `You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:\n- GREEN ({Current Green Ohm}): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").\n- BLUE ({Current Blue Ohm}): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.\n- RED ({Current Red Ohm}): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").\n- PINK ({Current Pink Ohm}): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").`;
+                    if (!settings.ohmPromptInstructions || window.confirm('This will overwrite your custom prompt with the default template. Continue?')) {
+                      setSettings(prev => ({ ...prev, ohmPromptInstructions: defaultPrompt }));
+                    }
+                  }}
+                  className="text-xs text-red-600 hover:text-red-700 font-medium"
+                >
+                  Load Default Template
+                </button>
+              </div>
+              <textarea
+                value={settings.ohmPromptInstructions || ''}
+                onChange={(e) => setSettings({ ...settings, ohmPromptInstructions: e.target.value })}
+                placeholder="Ex: You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks... (Leave empty to use the system default)"
+                className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50 min-h-[200px]"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                This prompt replaces the internal default instructions sent to the AI when calculating Ohm. You can write rules about how it should classify Green (Fillers), Blue (Frames), Red (Idioms), and Pink (Key Terms).
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-6 md:col-span-2">
+            <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+              <Layers className="w-4 h-4 mr-2 text-gray-400" /> Base Ohm Values
+            </label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
+                <div key={color}>
+                  <label className={`block text-xs font-bold uppercase mb-1 ${color === 'Green' ? 'text-green-700' : color === 'Blue' ? 'text-blue-700' : color === 'Red' ? 'text-red-700' : 'text-pink-700'}`}>{color} Value</label>
+                  <input
+                    type="number"
+                    value={settings.ohmBaseValues?.[color as keyof typeof settings.ohmBaseValues] ?? (color === 'Green' ? 5 : color === 'Blue' ? 7 : color === 'Red' ? 9 : 3)}
+                    onChange={(e) => setSettings({ 
+                      ...settings, 
+                      ohmBaseValues: { 
+                        ...(settings.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 }), 
+                        [color]: Number(e.target.value) 
+                      } 
+                    })}
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="md:col-span-2 pt-6 border-t border-gray-100">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+               <h4 className="font-bold text-sm text-gray-900 mb-2 flex items-center">
+                  <Globe className="w-4 h-4 mr-2" /> API Endpoint for 3rd Party
+               </h4>
+               <p className="text-xs text-gray-600 mb-3">
+                  You can call this Ohm Analysis logic from your own webhook or external app. Make a POST request to the local API:
+               </p>
+               <div className="bg-gray-900 rounded-lg p-3 overflow-x-auto relative group">
+                 <button 
+                   onClick={() => {
+                     const apiSnippet = `fetch('${window.location.origin}/api/analyze-ohm', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    transcript: "Câu mẫu cần Test Ohm...",
+    settings: {
+      ohmBaseValues: { Green: 5, Blue: 7, Red: 9, Pink: 3 },
+      // Optional: ohmPromptInstructions: "..."
+    },
+    // Optional: webhookUrl: "https://your-server.com/callback" 
+  })
+})`;
+                     navigator.clipboard.writeText(apiSnippet);
+                     alert('Full API request snippet copied to clipboard!');
+                   }}
+                   className="absolute top-2 right-2 p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-md text-[10px] uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                 >
+                   Copy Snippet
+                 </button>
+                 <pre className="text-xs text-green-400 font-mono leading-relaxed">
+{`fetch('${window.location.origin}/api/analyze-ohm', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    transcript: "Câu mẫu cần Test Ohm...",
+    settings: { /* Optional: custom prompt or ohm values */ },
+    webhookUrl: "https://your-server/callback" // Optional: for async delivery
+  })
+})`}
+                 </pre>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

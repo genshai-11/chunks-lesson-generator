@@ -82,14 +82,22 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
 }
 
 export async function analyzeTranscript(transcript: string, settings?: AISettings, baseOhms?: Record<string, number>): Promise<OhmAnalysisResult> {
-  const ohms = baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+  const ohms = settings?.ohmBaseValues || baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
   
-  const prompt = `
+  const defaultInstructions = `
 You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:
 - GREEN (${ohms.Green} Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
 - BLUE (${ohms.Blue} Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
 - RED (${ohms.Red} Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
 - PINK (${ohms.Pink} Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").
+`;
+
+  const systemInstructions = settings?.ohmPromptInstructions && settings.ohmPromptInstructions.trim() !== '' 
+     ? settings.ohmPromptInstructions 
+     : defaultInstructions;
+
+  const prompt = `
+${systemInstructions}
 
 CRITICAL RULES FOR CHUNKING:
 1. DO NOT classify every word or sentence. Most of the transcript is just normal speech and MUST BE IGNORED.

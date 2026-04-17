@@ -33,4 +33,11 @@ export interface AISettings {
   elevenLabsApiKey?: string;
   elevenLabsModel?: string;
   elevenLabsVoiceId?: string;
+  ohmPromptInstructions?: string;
+  ohmBaseValues?: {
+    Green: number;
+    Blue: number;
+    Red: number;
+    Pink: number;
+  };
 }

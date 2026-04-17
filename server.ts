@@ -64,6 +64,153 @@ async function startServer() {
     }
   });
 
+  // Analyze Ohm API (Can be used by 3rd party webhooks)
+  app.post('/api/analyze-ohm', async (req, res) => {
+    const { transcript, settings, webhookUrl } = req.body;
+
+    if (!transcript) {
+      return res.status(400).json({ error: 'Transcript is required' });
+    }
+
+    const processOhm = async () => {
+      const ohms = settings?.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+      
+      const defaultInstructions = `
+You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:
+- GREEN (${ohms.Green} Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
+- BLUE (${ohms.Blue} Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
+- RED (${ohms.Red} Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
+- PINK (${ohms.Pink} Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").`;
+
+      const systemInstructions = settings?.ohmPromptInstructions && settings.ohmPromptInstructions.trim() !== '' 
+         ? settings.ohmPromptInstructions 
+         : defaultInstructions;
+
+      const prompt = `
+${systemInstructions}
+
+CRITICAL RULES FOR CHUNKING:
+1. DO NOT classify every word or sentence. Most of the transcript is just normal speech and MUST BE IGNORED.
+2. BLUE IS NOT A CATCH-ALL: Do not put leftover or normal sentences into BLUE. A regular statement (e.g., "Hôm nay trời mưa", "Tôi đang đi làm") is NOT BLUE. BLUE must be a specific, reusable template.
+3. Common verbs (e.g., "bơi", "ăn"), common nouns (e.g., "mưa", "ngày"), or basic adjectives are NOT PINK unless they are highly specific technical jargon.
+4. Do not force a classification. If a sentence only has one BLUE frame and the rest is normal speech, ONLY extract the BLUE frame and ignore the rest.
+5. Extract exact substrings from the transcript.
+6. Provide a brief reason for the classification.
+7. Estimate a confidence score between 0.0 and 1.0.
+
+Rules for Ohm calculation:
+- GREEN = ${ohms.Green}, BLUE = ${ohms.Blue}, RED = ${ohms.Red}, PINK = ${ohms.Pink}.
+- If multiple chunks have the SAME label, ADD their values.
+- If chunks have DIFFERENT labels, MULTIPLY the group sums.
+Example 1: 1 GREEN, 1 BLUE -> ${ohms.Green} * ${ohms.Blue} = ${ohms.Green * ohms.Blue}
+Example 2: 2 GREENs, 1 RED -> (${ohms.Green} + ${ohms.Green}) * ${ohms.Red} = ${(ohms.Green + ohms.Green) * ohms.Red}
+Example 3: 1 RED, 2 PINKs -> ${ohms.Red} * (${ohms.Pink} + ${ohms.Pink}) = ${ohms.Red * (ohms.Pink + ohms.Pink)}
+
+Transcript:
+"${transcript}"
+
+Return the result STRICTLY as a JSON object with this structure:
+{
+  "transcriptRaw": "original transcript",
+  "transcriptNormalized": "lowercase, no punctuation version of transcript",
+  "chunks": [
+    {
+      "text": "extracted text",
+      "label": "GREEN|BLUE|RED|PINK",
+      "ohm": number,
+      "confidence": number,
+      "reason": "short reason"
+    }
+  ],
+  "formula": "string representing the math formula (e.g., '5 x 7 x 3' or '(5 + 5) x 9')",
+  "totalOhm": number
+}
+`;
+
+      let responseText = '';
+
+      if (settings?.apiKey && settings?.endpoint && settings?.primaryModel) {
+        let endpoint = settings.endpoint.endsWith('/') ? settings.endpoint.slice(0, -1) : settings.endpoint;
+        const targetUrl = `${endpoint}/chat/completions`;
+        
+        let authHeader = settings.apiKey;
+        if (!authHeader.startsWith('Bearer ')) {
+          authHeader = `Bearer ${authHeader}`;
+        }
+
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify({
+            model: settings.primaryModel,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        
+        if (!res.ok) {
+           throw new Error(`Custom model failed: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+          responseText = data.choices[0].message.content;
+        } else if (data.response) {
+          responseText = data.response;
+        } else if (data.content && Array.isArray(data.content)) {
+          responseText = data.content[0].text;
+        } else {
+          throw new Error('Unexpected API format');
+        }
+      } else {
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt
+        });
+        if (!geminiRes.text) throw new Error("No response from Gemini");
+        responseText = geminiRes.text;
+      }
+
+      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || responseText.match(/\{[\s\S]*\}/);
+      const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : responseText;
+      return JSON.parse(jsonString);
+    };
+
+    if (webhookUrl) {
+      res.json({ status: 'processing', message: 'Analysis started and will be sent to webhook.' });
+      
+      (async () => {
+        try {
+          const result = await processOhm();
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'success', data: result })
+          });
+        } catch (error: any) {
+          console.error("Webhook processing error:", error);
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'error', error: error.message })
+          }).catch(console.warn);
+        }
+      })();
+    } else {
+      try {
+        const result = await processOhm();
+        res.json({ status: 'success', data: result });
+      } catch (error: any) {
+        console.error("Ohm Analysis Error", error);
+        res.status(500).json({ status: 'error', error: error.message });
+      }
+    }
+  });
+
   // Proxy for OpenRouter Models
   app.get('/api/ai/models', async (req, res) => {
     const apiKey = req.headers.authorization;
