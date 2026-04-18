@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { Resource, ColorCategory, AISettings } from '../types';
+import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 
 // Default Gemini client (fallback if no custom settings)
 const defaultAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -10,7 +10,7 @@ export interface GenerateChunkParams {
   iValue: number;
   uTotal: number;
   theme?: string;
-  sentenceLength?: 'Short' | 'Medium' | 'Long';
+  sentenceLength?: SentenceLength;
   settings?: AISettings;
 }
 
@@ -24,7 +24,7 @@ export interface AutoGenerateParams {
   theme: string;
   targetU: number;
   quantity: number;
-  sentenceLength: 'Short' | 'Medium' | 'Long';
+  sentenceLength: SentenceLength;
   colorPreferences: ColorCategory[];
   availableResources: Resource[];
   settings?: AISettings;
@@ -55,7 +55,7 @@ export interface OhmAnalysisResult {
   totalOhm: number;
 }
 
-export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+export async function transcribeAudio(audioBlob: Blob, settings?: AISettings): Promise<string> {
   const base64Audio = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -66,8 +66,12 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     reader.readAsDataURL(audioBlob);
   });
 
-  const response = await defaultAi.models.generateContent({
-    model: 'gemini-2.5-flash',
+  const apiKey = settings?.geminiApiKey || process.env.GEMINI_API_KEY;
+  const aiClient = apiKey && apiKey !== process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: apiKey as string }) : defaultAi;
+  const modelToUse = settings?.audioTranscriptModel || 'gemini-2.5-flash';
+
+  const response = await aiClient.models.generateContent({
+    model: modelToUse,
     contents: [
       {
         inlineData: {
@@ -105,39 +109,44 @@ QUY TẮC CỐT LÕI:
 ${systemInstructions}
 
 CRITICAL RULES FOR CHUNKING:
-1. DO NOT classify every word or sentence. Most of the transcript is just normal speech and MUST BE IGNORED.
-2. BLUE IS NOT A CATCH-ALL: Do not put leftover or normal sentences into BLUE. A regular statement (e.g., "Hôm nay trời mưa", "Tôi đang đi làm") is NOT BLUE. BLUE must be a specific, reusable template.
-3. Common verbs (e.g., "bơi", "ăn"), common nouns (e.g., "mưa", "ngày"), or basic adjectives are NOT PINK unless they are highly specific technical jargon.
-4. Do not force a classification. If a sentence only has one BLUE frame and the rest is normal speech, ONLY extract the BLUE frame and ignore the rest.
-5. Extract exact substrings from the transcript.
-6. Provide a brief reason for the classification.
-7. Estimate a confidence score between 0.0 and 1.0.
+1. QUALITY OVER QUANTITY: Extract all chunks that truly fit the categories, but ignore common adjectives, basic verbs, and everyday noun phrases.
+2. RED IS FOR FIGURATIVE LANGUAGE: Only extract Red if it is a true idiom, metaphor, or vivid colloquial expression. Common praise like "rất tốt", "rất đỉnh", "tuyệt vời" is NOT RED.
+3. PINK IS FOR INTERMEDIATE/TECHNICAL VOCABULARY: Only extract Pink if it is a specific topic-related concept, technical term, or academic/intermediate-level vocabulary (e.g., "ứng dụng thực tế", "phát triển bền vững"). Basic nouns like "mèo", "bàn", "nước" are NOT PINK.
+4. BLUE MUST BE A FRAME: It must be a reusable structure waiting for content. A complete standalone sentence is rarely BLUE.
+5. NO FRAGMENTATION: Don't break phrases that should be together.
+6. IGNORE FILLER: If a word adds no energy (like simple "và", "nhưng" in normal use), ignore it unless it acts as a specific discourse marker (GREEN).
+7. Extract exact substrings.
+8. Brief reason and confidence required.
 
 Rules for Ohm calculation:
 - GREEN = ${ohms.Green}, BLUE = ${ohms.Blue}, RED = ${ohms.Red}, PINK = ${ohms.Pink}.
 - If multiple chunks have the SAME label, ADD their values.
 - If chunks have DIFFERENT labels, MULTIPLY the group sums.
-Example 1: 1 GREEN, 1 BLUE -> ${ohms.Green} * ${ohms.Blue} = ${ohms.Green * ohms.Blue}
-Example 2: 2 GREENs, 1 RED -> (${ohms.Green} + ${ohms.Green}) * ${ohms.Red} = ${(ohms.Green + ohms.Green) * ohms.Red}
-Example 3: 1 RED, 2 PINKs -> ${ohms.Red} * (${ohms.Pink} + ${ohms.Pink}) = ${ohms.Red * (ohms.Pink + ohms.Pink)}
 
 Transcript:
 "${transcript}"
 
-Return the result STRICTLY as a JSON object with this structure:
+Return the result STRICTLY as a JSON object with this structure (example with 2 chunks):
 {
-  "transcriptRaw": "original transcript",
-  "transcriptNormalized": "lowercase, no punctuation version of transcript",
+  "transcriptRaw": "...",
+  "transcriptNormalized": "...",
   "chunks": [
     {
-      "text": "extracted text",
-      "label": "GREEN|BLUE|RED|PINK",
-      "ohm": number,
-      "confidence": number,
-      "reason": "short reason"
+      "text": "chunk 1",
+      "label": "BLUE",
+      "ohm": ${ohms.Blue},
+      "confidence": 0.9,
+      "reason": "..."
+    },
+    {
+      "text": "chunk 2",
+      "label": "RED",
+      "ohm": ${ohms.Red},
+      "confidence": 0.8,
+      "reason": "..."
     }
   ],
-  "formula": "string representing the math formula (e.g., '5 x 7 x 3' or '(5 + 5) x 9')",
+  "formula": "string formula",
   "totalOhm": number
 }
 `;
@@ -300,13 +309,19 @@ function cleanJSON(text: string): string {
 export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
   const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
   const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
+  
+  const currentLen = sentenceLength || 'Medium';
+  const constraints = settings?.sentenceConstraints?.[currentLen];
+  
+  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
+  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
 
 const prompt = `
 You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
 Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
 
 Target Theme/Topic: ${theme || 'General Conversation'}
-Desired Sentence Length: ${sentenceLength || 'Medium'}
+Desired Sentence Length: ${currentLen}
 
 Algorithm Context:
 - U = I * R
@@ -320,11 +335,10 @@ ${resourceList}
 Instructions:
 1. Primary Goal (Vietnamese First): Start by coming up with a highly natural, meaningful, and contextually logical Vietnamese sentence (or paragraph) that accurately incorporates the exact meaning of all the input resources. Do NOT just list them. Think deeply to create a coherent scenario.
 2. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
-3. Length Calibration: Strictly follow the length constraints: 
-   - "Short": Single concise sentence.
-   - "Medium": About 2 connected sentences.
-   - "Long": A short paragraph of 3 to 4 sentences.
-   You must produce a "${sentenceLength || 'Medium'}" length output.
+3. Length Calibration: Strictly follow the length constraints for "${currentLen}": 
+   - You MUST generate MAXIMUM ${maxSentences} sentence(s).
+   - Total word count MUST be under ${maxWords} words.
+   - If "Very Short", ensure exactly 1 small sentence.
 4. Theme Adherence: The context MUST strictly revolve around the theme: ${theme || 'General'}.
 5. Energy Level: The structural complexity and vocabulary choice should reflect the U (Voltage) value: ${uTotal}. Higher U means more sophisticated grammar and nuanced meaning.
 6. Classification: Assign a relevant thematic category.
@@ -351,6 +365,11 @@ Output MUST be strictly in the following JSON format:
 export async function generateAutoChunks(params: AutoGenerateParams): Promise<AutoGeneratedChunk[]> {
   const { theme, targetU, quantity, sentenceLength, colorPreferences, availableResources, settings } = params;
 
+  const currentLen = sentenceLength || 'Medium';
+  const constraints = settings?.sentenceConstraints?.[currentLen];
+  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
+  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+
   // Pre-filter resources to balance them based on color preferences and target U
   const filteredAvailable = availableResources
     .filter(r => colorPreferences.length === 0 || colorPreferences.includes(r.color))
@@ -370,7 +389,10 @@ Your mission is to construct ${quantity} high-quality learning chunks.
 
 Theme: ${theme}
 Target Voltage (U): ${targetU}
-Sentence Length: ${sentenceLength} ("Short": 1 sentence, "Medium": 2 sentences, "Long": 3-4 sentences)
+Sentence Length Constraints ("${currentLen}"):
+- MAXIMUM ${maxSentences} sentence(s)
+- Total word count MUST be under ${maxWords} words.
+- If "Very Short", ensure exactly 1 short sentence.
 Color Preferences: ${colorPreferences.join(', ')}
 
 Available Ingredients (Resources):
@@ -384,7 +406,7 @@ Construction Flow:
 1. Resource Selection: Pick 2-4 resources that mathematically approach the Target U.
 2. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the resources.
 3. English Translation: Translate that Vietnamese concept into natural English.
-4. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length appropriate? If not, REGENERATE.
+4. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length roughly around ${maxSentences} sentences and under ${maxWords} words? If not, REGENERATE.
 5. Final Validation: Ensure all resources used are from the provided list.
 
 Output strictly as JSON array:

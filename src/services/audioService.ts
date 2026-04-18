@@ -2,6 +2,41 @@ import { AISettings } from '../types';
 
 export async function generateAudio(text: string, settings?: AISettings): Promise<string | null> {
   try {
+    const provider = settings?.ttsProvider || 'elevenlabs';
+
+    if (provider === 'deepgram') {
+      const apiKey = settings?.deepgramApiKey;
+      const model = settings?.deepgramModel || 'aura-asteria-en';
+
+      if (!apiKey) {
+        throw new Error('Deepgram API key not configured');
+      }
+
+      const response = await fetch(`https://api.deepgram.com/v1/speak?model=${model}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${apiKey}`,
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Deepgram API error:', error);
+        throw new Error('Failed to generate audio with Deepgram');
+      }
+
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // Default to elevenlabs
     const apiKey = settings?.elevenLabsApiKey;
     const voiceId = settings?.elevenLabsVoiceId || '21m00Tcm4TlvDq8ikWAM';
     const modelId = settings?.elevenLabsModel || 'eleven_multilingual_v2';

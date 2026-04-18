@@ -194,11 +194,25 @@ export default function ChunksTab() {
     }
   };
 
+  const getLatestAiSettings = async () => {
+    try {
+      const docRef = doc(db, `workspaces/default/settings`, 'ai');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as AISettings;
+      }
+    } catch (error) {
+      console.error('Error loading AI settings:', error);
+    }
+    return undefined;
+  };
+
   const handleGenerateAudio = async (chunk: Chunk) => {
     if (!auth.currentUser) return;
     setGeneratingAudioId(chunk.id);
     try {
-      const audioUrl = await generateAudio(chunk.engSentence, aiSettings);
+      const currentSettings = await getLatestAiSettings();
+      const audioUrl = await generateAudio(chunk.engSentence, currentSettings);
       if (audioUrl) {
         await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), {
           audioUrl: audioUrl
@@ -259,10 +273,12 @@ export default function ChunksTab() {
     let failCount = 0;
     let lastError = '';
 
+    const currentSettings = await getLatestAiSettings();
+
     for (const chunk of chunksToProcess) {
       setGeneratingAudioId(chunk.id);
       try {
-        const audioUrl = await generateAudio(chunk.engSentence, aiSettings);
+        const audioUrl = await generateAudio(chunk.engSentence, currentSettings);
         if (audioUrl) {
           await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), {
             audioUrl: audioUrl

@@ -3,7 +3,8 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { AISettings } from '../types';
 import { fetchOpenRouterModels } from '../services/aiService';
-import { Settings, Save, Loader2, RefreshCw, Key, Globe, Layers, Volume2, Sparkles, Eye, EyeOff, Copy } from 'lucide-react';
+import { generateAudio } from '../services/audioService';
+import { Settings, Save, Loader2, RefreshCw, Key, Globe, Layers, Volume2, Sparkles, Eye, EyeOff, Copy, Mic } from 'lucide-react';
 
 export default function SettingsTab() {
   const [settings, setSettings] = useState<AISettings>({
@@ -14,7 +15,16 @@ export default function SettingsTab() {
     elevenLabsApiKey: '',
     elevenLabsModel: 'eleven_multilingual_v2',
     elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
+    ttsProvider: 'elevenlabs',
+    deepgramApiKey: '',
+    deepgramModel: 'aura-asteria-en',
     m2mApiKey: '',
+    sentenceConstraints: {
+      'Very Short': { maxSentences: 1, maxWords: 15 },
+      'Short': { maxSentences: 2, maxWords: 30 },
+      'Medium': { maxSentences: 3, maxWords: 60 },
+      'Long': { maxSentences: 5, maxWords: 100 }
+    }
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,6 +51,14 @@ export default function SettingsTab() {
           if (data.elevenLabsVoiceId === 'pNInz6obpg8ndclKuztW') {
             data.elevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
           }
+          if (!data.sentenceConstraints) {
+            data.sentenceConstraints = {
+              'Very Short': { maxSentences: 1, maxWords: 15 },
+              'Short': { maxSentences: 2, maxWords: 30 },
+              'Medium': { maxSentences: 3, maxWords: 60 },
+              'Long': { maxSentences: 5, maxWords: 100 }
+            };
+          }
           setSettings(data);
         }
       } catch (error) {
@@ -63,6 +81,9 @@ export default function SettingsTab() {
         apiKey: settings.apiKey,
         primaryModel: settings.primaryModel,
         fallbackModel: settings.fallbackModel,
+        sentenceConstraints: settings.sentenceConstraints,
+        geminiApiKey: settings.geminiApiKey || null,
+        audioTranscriptModel: settings.audioTranscriptModel || null,
       }, { merge: true });
       alert('AI Configuration saved successfully!');
     } catch (error) {
@@ -79,9 +100,12 @@ export default function SettingsTab() {
     try {
       const docRef = doc(db, `workspaces/default/settings`, 'ai');
       await setDoc(docRef, {
+        ttsProvider: settings.ttsProvider || 'elevenlabs',
         elevenLabsApiKey: settings.elevenLabsApiKey,
         elevenLabsModel: settings.elevenLabsModel,
         elevenLabsVoiceId: settings.elevenLabsVoiceId,
+        deepgramApiKey: settings.deepgramApiKey,
+        deepgramModel: settings.deepgramModel,
       }, { merge: true });
       alert('Audio Configuration saved successfully!');
     } catch (error) {
@@ -173,42 +197,24 @@ export default function SettingsTab() {
   };
 
   const handlePreviewVoice = async () => {
-    if (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) {
-      alert('Please configure API Key and Voice ID first.');
+    if (settings.ttsProvider === 'elevenlabs' && (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId)) {
+      alert('Please configure ElevenLabs API Key and Voice ID first.');
       return;
     }
+    if (settings.ttsProvider === 'deepgram' && !settings.deepgramApiKey) {
+      alert('Please configure Deepgram API Key first.');
+      return;
+    }
+    
     setPreviewingVoice(true);
     try {
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${settings.elevenLabsVoiceId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': settings.elevenLabsApiKey,
-        },
-        body: JSON.stringify({ 
-          text: previewText,
-          model_id: settings.elevenLabsModel || 'eleven_multilingual_v2',
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.5,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        if (error.detail && error.detail.message) {
-          throw new Error(error.detail.message);
-        } else if (error.error) {
-          throw new Error(error.error);
-        }
-        throw new Error('Failed to generate preview');
+      const audioUrl = await generateAudio(previewText, settings);
+      if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        await audio.play();
+      } else {
+        throw new Error('Failed to generate audio URL');
       }
-
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-      await audio.play();
     } catch (error: any) {
       console.error('Error previewing voice:', error);
       alert(`Preview failed: ${error.message}`);
@@ -391,6 +397,101 @@ export default function SettingsTab() {
                 </div>
               </div>
             </div>
+
+            {/* Audio Transcript Constraints */}
+            <div className="mt-8 pt-8 border-t border-gray-100">
+              <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                <Mic className="w-4 h-4 mr-2 text-gray-400" /> Audio Ohm / Transcription (Gemini)
+              </h4>
+              <p className="text-xs text-gray-500 mb-4">
+                These settings specifically control the Whisper/Gemini model used during the recording phase in the Audio Ohm tab. Use this to circumvent rate limits (Code 429) on the default free tier.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Key className="w-4 h-4 mr-2 text-gray-400" /> Gemini Custom API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={settings.geminiApiKey || ''}
+                    onChange={(e) => setSettings({ ...settings, geminiApiKey: e.target.value })}
+                    placeholder="AIzaSy..."
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                  <p className="mt-1.5 text-[11px] text-gray-400 italic">Leave empty to use the system default key.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Layers className="w-4 h-4 mr-2 text-gray-400" /> Model Name
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.audioTranscriptModel || ''}
+                    onChange={(e) => setSettings({ ...settings, audioTranscriptModel: e.target.value })}
+                    placeholder="e.g., gemini-2.5-flash or gemini-1.5-pro"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                  <p className="mt-1.5 text-[11px] text-gray-400 italic">Default: gemini-2.5-flash</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sentence Constraints */}
+            <div className="mt-8 pt-8 border-t border-gray-100">
+              <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                <Layers className="w-4 h-4 mr-2 text-gray-400" /> Sentence Length Constraints
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
+                  <div key={len} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <label className="block text-[10px] font-bold uppercase mb-2 text-gray-700">{len}</label>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase">Max Sentences</span>
+                        <input
+                          type="number"
+                          value={settings.sentenceConstraints?.[len]?.maxSentences ?? 1}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            sentenceConstraints: {
+                              ...(settings.sentenceConstraints || {
+                                'Very Short': { maxSentences: 1, maxWords: 15 },
+                                'Short': { maxSentences: 2, maxWords: 30 },
+                                'Medium': { maxSentences: 3, maxWords: 60 },
+                                'Long': { maxSentences: 5, maxWords: 100 }
+                              }),
+                              [len]: { ...(settings.sentenceConstraints?.[len] || {}), maxSentences: Number(e.target.value) }
+                            }
+                          })}
+                          className="w-full mt-1 rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-xs bg-white"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-500 uppercase">Max Words</span>
+                        <input
+                          type="number"
+                          value={settings.sentenceConstraints?.[len]?.maxWords ?? 15}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            sentenceConstraints: {
+                              ...(settings.sentenceConstraints || {
+                                'Very Short': { maxSentences: 1, maxWords: 15 },
+                                'Short': { maxSentences: 2, maxWords: 30 },
+                                'Medium': { maxSentences: 3, maxWords: 60 },
+                                'Long': { maxSentences: 5, maxWords: 100 }
+                              }),
+                              [len]: { ...(settings.sentenceConstraints?.[len] || {}), maxWords: Number(e.target.value) }
+                            }
+                          })}
+                          className="w-full mt-1 rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -398,7 +499,7 @@ export default function SettingsTab() {
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                <Volume2 className="w-6 h-6 mr-2 text-red-600" /> Audio Configuration (ElevenLabs)
+                <Volume2 className="w-6 h-6 mr-2 text-red-600" /> Audio Configuration (TTS)
               </h3>
               <button
                 onClick={handleSaveAudio}
@@ -410,6 +511,37 @@ export default function SettingsTab() {
               </button>
             </div>
 
+            <div className="mb-8">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                TTS Provider
+              </label>
+              <div className="flex space-x-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ttsProvider"
+                    value="elevenlabs"
+                    checked={settings.ttsProvider === 'elevenlabs'}
+                    onChange={() => setSettings({ ...settings, ttsProvider: 'elevenlabs' })}
+                    className="text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium">ElevenLabs</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ttsProvider"
+                    value="deepgram"
+                    checked={settings.ttsProvider === 'deepgram'}
+                    onChange={() => setSettings({ ...settings, ttsProvider: 'deepgram' })}
+                    className="text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium">Deepgram</span>
+                </label>
+              </div>
+            </div>
+
+            {settings.ttsProvider === 'elevenlabs' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-6">
                 <div>
@@ -473,31 +605,75 @@ export default function SettingsTab() {
                     className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
                   />
                 </div>
+              </div>
+            </div>
+            )}
 
-                <div className="pt-2 border-t border-gray-100">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Preview Voice
+            {settings.ttsProvider === 'deepgram' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Key className="w-4 h-4 mr-2 text-gray-400" /> Deepgram API Key
                   </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={previewText}
-                      onChange={(e) => setPreviewText(e.target.value)}
-                      placeholder="Text to preview..."
-                      className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
-                    />
-                    <button
-                      onClick={handlePreviewVoice}
-                      disabled={previewingVoice || !settings.elevenLabsVoiceId}
-                      className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:bg-gray-300 transition-colors flex items-center"
-                    >
-                      {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                      Preview
-                    </button>
-                  </div>
+                  <input
+                    type="password"
+                    value={settings.deepgramApiKey || ''}
+                    onChange={(e) => setSettings({ ...settings, deepgramApiKey: e.target.value })}
+                    placeholder="Enter Deepgram API Key"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                </div>
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Layers className="w-4 h-4 mr-2 text-gray-400" /> Voice Model
+                  </label>
+                  <select
+                    value={settings.deepgramModel || 'aura-asteria-en'}
+                    onChange={(e) => setSettings({ ...settings, deepgramModel: e.target.value })}
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  >
+                    <option value="aura-asteria-en">Aura Asteria (English Female)</option>
+                    <option value="aura-luna-en">Aura Luna (English Female)</option>
+                    <option value="aura-stella-en">Aura Stella (English Female)</option>
+                    <option value="aura-athena-en">Aura Athena (English Female)</option>
+                    <option value="aura-hera-en">Aura Hera (English Female)</option>
+                    <option value="aura-orion-en">Aura Orion (English Male)</option>
+                    <option value="aura-arcas-en">Aura Arcas (English Male)</option>
+                    <option value="aura-perseus-en">Aura Perseus (English Male)</option>
+                    <option value="aura-angus-en">Aura Angus (English Male)</option>
+                    <option value="aura-orpheus-en">Aura Orpheus (English Male)</option>
+                  </select>
                 </div>
               </div>
             </div>
+            )}
+
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Preview Voice
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  placeholder="Text to preview..."
+                  className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                />
+                <button
+                  onClick={handlePreviewVoice}
+                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
+                  className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:bg-gray-300 transition-colors flex items-center"
+                >
+                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
+                  Preview
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
 

@@ -103,7 +103,8 @@ export default function AudioOhmTestTab() {
   const handleTranscription = async (blob: Blob) => {
     setStatus('transcribing');
     try {
-      const text = await transcribeAudio(blob);
+      const settings = await getSettings();
+      const text = await transcribeAudio(blob, settings);
       setTranscript(text);
       setEditedTranscript(text);
       await handleAnalysis(text);
@@ -292,21 +293,21 @@ export default function AudioOhmTestTab() {
             {result.chunks.length > 0 ? (
               <div className="space-y-3">
                 {result.chunks.map((chunk, idx) => (
-                  <div key={idx} className={`p-4 rounded-xl border ${getCategoryColor(chunk.label)}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="font-bold text-lg">{chunk.text}</span>
+                  <div key={idx} className={`p-4 rounded-xl border ${getCategoryColor(chunk.label)} shadow-sm`}>
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold text-base md:text-lg block break-words leading-tight">{chunk.text}</span>
                         {expertMode && (
-                          <p className="text-xs mt-1 opacity-80">Reason: {chunk.reason}</p>
+                          <p className="text-xs mt-1.5 opacity-80 leading-snug break-words">Reason: {chunk.reason}</p>
                         )}
                       </div>
-                      <div className="flex flex-col items-end">
-                        <span className="px-2 py-1 bg-white/50 rounded text-xs font-bold uppercase tracking-wider mb-1">
+                      <div className="flex flex-col items-end shrink-0">
+                        <span className="px-2 py-0.5 bg-white/60 rounded text-[10px] font-black uppercase tracking-tighter mb-1 border border-black/5">
                           {chunk.label}
                         </span>
-                        <span className="font-mono font-bold">{chunk.ohm} Ω</span>
+                        <span className="font-mono font-black text-sm md:text-base">{chunk.ohm} Ω</span>
                         {expertMode && (
-                          <span className="text-[10px] mt-1 opacity-70">Conf: {chunk.confidence.toFixed(2)}</span>
+                          <span className="text-[10px] mt-1 font-bold opacity-60">C: {chunk.confidence.toFixed(2)}</span>
                         )}
                       </div>
                     </div>

@@ -298,22 +298,8 @@ export default function PlayerTab() {
           )}
         </div>
 
-        {/* Top Header - Fixed at top, inline in flex flow */}
-        <div className="relative z-10 p-4 md:p-6 flex justify-between items-start shrink-0">
-          <div>
-            <h1 className="text-xl md:text-2xl font-black text-white tracking-tighter bg-red-600 inline-block px-2 py-0.5 md:py-1 mb-1 shadow-sm">CHUNKS</h1>
-            <p className="text-[10px] md:text-xs font-medium text-gray-300 tracking-widest uppercase drop-shadow-md">Voice Energy Trainer</p>
-          </div>
-          <button 
-            onClick={toggleCamera}
-            className="p-3 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-colors border border-white/10"
-          >
-            {cameraActive ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-          </button>
-        </div>
-
         {/* Scrollable Content Area - Takes remaining space */}
-        <div className="relative z-10 flex-1 flex flex-col justify-end px-4 md:px-6 pb-4 md:pb-8 overflow-y-auto min-h-0">
+        <div className="relative z-10 flex-1 flex flex-col px-4 md:px-6 pb-4 md:pb-8 pt-4 md:pt-8 overflow-y-auto min-h-0">
           
           <AnimatePresence mode="wait">
             {currentChunk ? (
@@ -323,14 +309,14 @@ export default function PlayerTab() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
-                className="w-full max-w-2xl mx-auto flex flex-col items-center mt-auto p-4 md:p-8"
+                className="w-full max-w-4xl mx-auto flex flex-col items-center mt-auto p-4 md:p-8"
               >
                 {/* Visual Indicators for Resources inside current chunk */}
-                <div className="flex flex-wrap justify-center gap-1.5 mb-3 md:mb-5 w-full">
+                <div className="flex flex-wrap justify-center gap-1.5 mb-4 md:mb-6 w-full">
                   {currentChunk.resourcesUsed.map((res, idx) => {
                     if (typeof res === 'string') return null;
                     return (
-                      <span key={idx} className={`px-2 py-0.5 text-[9px] md:text-[10px] font-bold rounded-full uppercase tracking-wider border ${
+                      <span key={idx} className={`px-2.5 py-1 text-[10px] md:text-[11px] font-bold rounded-lg uppercase tracking-wider border whitespace-nowrap ${
                         res.color === 'Green' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
                         res.color === 'Blue' ? 'bg-blue-900/50 text-blue-300 border-blue-500/30' :
                         res.color === 'Red' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
@@ -342,45 +328,44 @@ export default function PlayerTab() {
                   })}
                 </div>
 
-                <h3 className="text-base sm:text-lg md:text-xl font-bold text-white mb-4 leading-relaxed text-center tracking-wide">
-                   {renderHighlightedSentence(currentChunk.vieSentence, currentChunk.resourcesUsed)}
-                </h3>
+                <div className="w-full text-center">
+                  <h3 className="text-sm sm:text-base md:text-lg font-normal text-white mb-6 leading-relaxed tracking-normal break-words">
+                    {renderHighlightedSentence(currentChunk.vieSentence, currentChunk.resourcesUsed)}
+                  </h3>
+                </div>
                 
-                <button
-                  onClick={playVietnamese}
-                  className="flex items-center space-x-2 px-4 py-2 md:px-6 md:py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white transition-all duration-200 mb-4 shrink-0"
-                >
-                  <Volume2 className="w-4 h-4 md:w-5 md:h-5" />
-                  <span className="font-semibold text-xs md:text-sm">Nghe tiếng Việt</span>
-                </button>
 
-                <div className="min-h-[40px] md:min-h-[60px] flex items-center justify-center w-full shrink-0">
-                  {showEnglish ? (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="px-4 py-3 md:px-6 w-full text-center"
-                    >
-                      <p className="text-sm md:text-lg font-bold text-white mb-2">{renderHighlightedSentence(currentChunk.engSentence, currentChunk.resourcesUsed)}</p>
-                      <button 
-                        onClick={() => setShowEnglish(false)}
-                        className="text-white/50 hover:text-white/80 text-xs font-medium flex items-center justify-center mx-auto transition-colors"
+                <div className="relative flex flex-col items-center justify-center w-full shrink-0">
+                  <AnimatePresence>
+                    {showEnglish && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute bottom-full mb-4 px-6 py-4 w-full max-w-lg text-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl z-20"
                       >
-                        <EyeOff className="w-3 h-3 mr-1" /> Hide English
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <button
-                      onClick={() => setShowEnglish(true)}
-                      className="text-xs md:text-sm font-medium text-gray-400 hover:text-white flex items-center transition-colors px-3 py-1.5 md:px-4 md:py-2"
-                    >
-                      Say it in English <Eye className="w-3 h-3 md:w-4 md:h-4 ml-1 md:ml-2 opacity-50" />
-                    </button>
-                  )}
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-black/80 border-r border-b border-white/10 rotate-45"></div>
+                        <p className="text-sm md:text-base font-medium text-white/90 leading-relaxed break-words">
+                          {renderHighlightedSentence(currentChunk.engSentence, currentChunk.resourcesUsed)}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <button
+                    onClick={() => setShowEnglish(!showEnglish)}
+                    className={`p-3 rounded-full border border-white/10 hover:bg-white/5 active:scale-95 transition-all group relative ${showEnglish ? 'text-white bg-white/10' : 'text-white/40 hover:text-white'}`}
+                    title="Translate to English"
+                  >
+                    {showEnglish ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
+                  </button>
                 </div>
               </motion.div>
             ) : (
-              <div className="text-gray-400 font-medium text-xs md:text-base mt-auto mx-auto pb-10">No sentence selected.</div>
+              <div className="text-gray-500 font-bold text-sm md:text-lg mt-auto mx-auto pb-12 flex flex-col items-center">
+                <Filter className="w-12 h-12 mb-4 opacity-20" />
+                No sentence selected.
+              </div>
             )}
           </AnimatePresence>
           

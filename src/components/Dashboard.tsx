@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { logOut, auth } from '../firebase';
-import { LogOut, Database, Wand2, ListMusic, Settings as SettingsIcon, Mic, User, PanelLeftClose, PanelLeftOpen, PlayCircle } from 'lucide-react';
+import { LogOut, Database, Wand2, ListMusic, Settings as SettingsIcon, Mic, User, PanelLeftClose, PanelLeftOpen, PlayCircle, Blocks } from 'lucide-react';
 import ResourcesTab from './ResourcesTab';
 import MixerTab from './MixerTab';
 import ChunksTab from './ChunksTab';
@@ -28,8 +28,9 @@ export default function Dashboard() {
       {/* MOBILE TOP HEADER */}
       <div className="md:hidden h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-20">
         <div className="flex items-center">
-          <span className="text-xl font-black text-red-600 tracking-tighter">CHUNKS</span>
-          <span className="ml-2 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">v3.0</span>
+          <Blocks className="w-6 h-6 text-red-600 mr-2" />
+          <span className="text-xl font-black text-red-600 tracking-tighter">chunks</span>
+          <span className="ml-2 text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">generator</span>
         </div>
         <button
           onClick={logOut}
@@ -48,8 +49,9 @@ export default function Dashboard() {
         <div className={`h-16 flex items-center border-b border-gray-100 ${isCollapsed ? 'justify-center px-0' : 'justify-between px-6'}`}>
           {!isCollapsed && (
             <div className="flex items-center overflow-hidden">
-              <span className="text-2xl font-black text-red-600 tracking-tighter">CHUNKS</span>
-              <span className="ml-2 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">v3.0</span>
+              <Blocks className="w-7 h-7 text-red-600 mr-2" />
+              <span className="text-2xl font-black text-red-600 tracking-tighter">chunks</span>
+              <span className="ml-2 text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">gen</span>
             </div>
           )}
           <button 
@@ -57,7 +59,7 @@ export default function Dashboard() {
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            {isCollapsed ? <Blocks className="w-6 h-6 text-red-600" /> : <PanelLeftClose className="w-5 h-5" />}
           </button>
         </div>
         

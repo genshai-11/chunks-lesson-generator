@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Resource, Chunk, AISettings } from '../types';
+import { Resource, Chunk, AISettings, SentenceLength, ColorCategory } from '../types';
 import { generateChunk } from '../services/aiService';
 import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw, Activity, Zap, Cpu, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -80,7 +80,8 @@ export default function MixerTab() {
   const [aiQuantity, setAiQuantity] = useState<number>(3);
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
-  const [aiSentenceLength, setAiSentenceLength] = useState<'Short' | 'Medium' | 'Long'>('Medium');
+  const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Medium');
+  const [aiComplexityBias, setAiComplexityBias] = useState<number>(1.5);
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
   const [rFormulaMode, setRFormulaMode] = useState<'circuit' | 'linear'>('circuit');
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
@@ -290,15 +291,12 @@ export default function MixerTab() {
       }
 
       if (currentCombo.length > 0) {
-        // Dynamic Load (I) calculation based on sentence length
-        let baseI = 1.0;
-        if (aiSentenceLength === 'Short') baseI = 0.8;
-        if (aiSentenceLength === 'Medium') baseI = 1.5;
-        if (aiSentenceLength === 'Long') baseI = 2.5;
+        // Base I calculation based on complexity bias
+        const baseI = aiComplexityBias;
         
-        // Add minimal jitter (+/- 0.2)
-        const jitter = (Math.random() * 0.4) - 0.2;
-        const finalI = Math.max(0.5, Math.round((baseI + jitter) * 10) / 10);
+        // Add minimal jitter (+/- 0.1) to keep it organic
+        const jitter = (Math.random() * 0.2) - 0.1;
+        const finalI = Math.max(0.1, Math.round((baseI + jitter) * 10) / 10);
         const finalU = Math.round((currentOhm * finalI) * 10) / 10;
 
         newDrafts.push({
@@ -658,6 +656,7 @@ export default function MixerTab() {
                        <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal">
                          <div className="space-y-2">
+                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span><br/>Exactly 1 small sentence. Max 15 words. High precision.</div>
                            <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span><br/>1-2 clauses, direct and concise. Focuses purely on embedding the keywords.</div>
                            <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span><br/>Standard conversational sentence, balanced context and detail.</div>
                            <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span><br/>Complex structures, multiple clauses, storytelling, rich context.</div>
@@ -666,18 +665,46 @@ export default function MixerTab() {
                        </div>
                     </div>
                   </label>
-                  <div className="flex bg-gray-100/50 p-1 rounded-xl">
-                    {(['Short', 'Medium', 'Long'] as const).map((len) => (
+                  <div className="flex bg-gray-100/50 p-1 rounded-xl mb-4">
+                    {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
                       <button
                         key={len}
-                        onClick={() => setAiSentenceLength(len)}
-                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                        onClick={() => {
+                          setAiSentenceLength(len);
+                          // Auto-adjust bias when changing length preset
+                          if (len === 'Very Short') setAiComplexityBias(0.5);
+                          if (len === 'Short') setAiComplexityBias(0.8);
+                          if (len === 'Medium') setAiComplexityBias(1.5);
+                          if (len === 'Long') setAiComplexityBias(2.5);
+                        }}
+                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-center leading-tight ${
                           aiSentenceLength === len ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
                         }`}
                       >
                         {len}
                       </button>
                     ))}
+                  </div>
+
+                  {/* Manual Bias Control */}
+                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100">
+                    <div className="flex justify-between items-center mb-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Complexity (I) Adjuster</label>
+                       <span className="text-xs font-black text-red-600">×{aiComplexityBias.toFixed(1)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="5.0"
+                      step="0.1"
+                      value={aiComplexityBias}
+                      onChange={(e) => setAiComplexityBias(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                    />
+                    <div className="flex justify-between mt-1 text-[8px] font-bold text-gray-400 uppercase tracking-tighter">
+                      <span>Linear (0.5)</span>
+                      <span>Sophisticated (5.0)</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -790,6 +817,11 @@ export default function MixerTab() {
                         <div className="text-center">
                           <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Load</span>
                           <div className="text-sm font-black text-gray-900">{draft.rTotal.toFixed(0)}Ω</div>
+                        </div>
+                        <div className="w-full h-px bg-gray-200" />
+                        <div className="text-center">
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter italic">Bias (I)</span>
+                          <div className="text-sm font-black text-gray-900 leading-none">×{draft.iValue.toFixed(1)}</div>
                         </div>
                         <div className="w-full h-px bg-gray-200" />
                         <div className="flex flex-col space-y-1">

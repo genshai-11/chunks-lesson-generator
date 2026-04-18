@@ -148,39 +148,44 @@ You are an expert linguistic analyzer. Analyze the following transcript and extr
 ${systemInstructions}
 
 CRITICAL RULES FOR CHUNKING:
-1. DO NOT classify every word or sentence. Most of the transcript is just normal speech and MUST BE IGNORED.
-2. BLUE IS NOT A CATCH-ALL: Do not put leftover or normal sentences into BLUE. A regular statement (e.g., "Hôm nay trời mưa", "Tôi đang đi làm") is NOT BLUE. BLUE must be a specific, reusable template.
-3. Common verbs (e.g., "bơi", "ăn"), common nouns (e.g., "mưa", "ngày"), or basic adjectives are NOT PINK unless they are highly specific technical jargon.
-4. Do not force a classification. If a sentence only has one BLUE frame and the rest is normal speech, ONLY extract the BLUE frame and ignore the rest.
-5. Extract exact substrings from the transcript.
-6. Provide a brief reason for the classification.
-7. Estimate a confidence score between 0.0 and 1.0.
+1. QUALITY OVER QUANTITY: Extract all chunks that truly fit the categories, but ignore common adjectives, basic verbs, and everyday noun phrases.
+2. RED IS FOR FIGURATIVE LANGUAGE: Only extract Red if it is a true idiom, metaphor, or vivid colloquial expression. Common praise like "rất tốt", "rất đỉnh", "tuyệt vời" is NOT RED.
+3. PINK IS FOR INTERMEDIATE/TECHNICAL VOCABULARY: Only extract Pink if it is a specific topic-related concept, technical term, or academic/intermediate-level vocabulary (e.g., "ứng dụng thực tế", "phát triển bền vững"). Basic nouns like "mèo", "bàn", "nước" are NOT PINK.
+4. BLUE MUST BE A FRAME: It must be a reusable structure waiting for content. A complete standalone sentence is rarely BLUE.
+5. NO FRAGMENTATION: Don't break phrases that should be together.
+6. IGNORE FILLER: If a word adds no energy (like simple "và", "nhưng" in normal use), ignore it unless it acts as a specific discourse marker (GREEN).
+7. Extract exact substrings.
+8. Brief reason and confidence required.
 
 Rules for Ohm calculation:
 - GREEN = ${ohms.Green}, BLUE = ${ohms.Blue}, RED = ${ohms.Red}, PINK = ${ohms.Pink}.
 - If multiple chunks have the SAME label, ADD their values.
 - If chunks have DIFFERENT labels, MULTIPLY the group sums.
-Example 1: 1 GREEN, 1 BLUE -> ${ohms.Green} * ${ohms.Blue} = ${ohms.Green * ohms.Blue}
-Example 2: 2 GREENs, 1 RED -> (${ohms.Green} + ${ohms.Green}) * ${ohms.Red} = ${(ohms.Green + ohms.Green) * ohms.Red}
-Example 3: 1 RED, 2 PINKs -> ${ohms.Red} * (${ohms.Pink} + ${ohms.Pink}) = ${ohms.Red * (ohms.Pink + ohms.Pink)}
 
 Transcript:
 "${transcript}"
 
-Return the result STRICTLY as a JSON object with this structure:
+Return the result STRICTLY as a JSON object with this structure (example with 2 chunks):
 {
-  "transcriptRaw": "original transcript",
-  "transcriptNormalized": "lowercase, no punctuation version of transcript",
+  "transcriptRaw": "...",
+  "transcriptNormalized": "...",
   "chunks": [
     {
-      "text": "extracted text",
-      "label": "GREEN|BLUE|RED|PINK",
-      "ohm": number,
-      "confidence": number,
-      "reason": "short reason"
+      "text": "chunk 1",
+      "label": "BLUE",
+      "ohm": ${ohms.Blue},
+      "confidence": 0.9,
+      "reason": "..."
+    },
+    {
+      "text": "chunk 2",
+      "label": "RED",
+      "ohm": ${ohms.Red},
+      "confidence": 0.8,
+      "reason": "..."
     }
   ],
-  "formula": "string representing the math formula (e.g., '5 x 7 x 3' or '(5 + 5) x 9')",
+  "formula": "string formula",
   "totalOhm": number
 }
 `;
@@ -225,12 +230,15 @@ Return the result STRICTLY as a JSON object with this structure:
       } else {
         const { GoogleGenAI } = await import('@google/genai');
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const geminiRes = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json'
+          }
         });
-        if (!geminiRes.text) throw new Error("No response from Gemini");
-        responseText = geminiRes.text;
+        responseText = response.text || '';
+        if (!responseText) throw new Error("No response from Gemini");
       }
 
       const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || responseText.match(/\{[\s\S]*\}/);
@@ -285,20 +293,22 @@ Return the result STRICTLY as a JSON object with this structure:
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: [
-          {
-            inlineData: {
-              mimeType: mimeType || 'audio/webm',
-              data: audioData
-            }
-          },
-          "Please transcribe this audio. Return ONLY the transcript text in the language spoken, with no other commentary, quotes, or formatting."
-        ]
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType || 'audio/webm',
+                data: audioData
+              }
+            },
+            { text: "Please transcribe this audio. Return ONLY the transcript text in the language spoken, with no other commentary, quotes, or formatting." }
+          ]
+        }
       });
 
-      const text = result.text || '';
+      const text = response.text || '';
       res.json({ status: 'success', transcript: text.trim() });
     } catch (error: any) {
       console.error("Transcription Error:", error);

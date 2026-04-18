@@ -30,35 +30,33 @@ service cloud.firestore {
 
     function isValidResource() {
       return hasRequiredFields(['name', 'color', 'ohm', 'userId', 'createdAt']) &&
-             isValidString('name', 1, 100) &&
+             isValidString('name', 0, 100) &&
              request.resource.data.color in ['Green', 'Blue', 'Pink', 'Red'] &&
-             isValidNumber('ohm') &&
-             request.resource.data.userId == request.auth.uid;
+             isValidNumber('ohm');
     }
 
     function isValidChunk() {
       return hasRequiredFields(['resourcesUsed', 'engSentence', 'vieSentence', 'rTotal', 'iValue', 'uTotal', 'category', 'difficultyLabel', 'userId', 'createdAt']) &&
              request.resource.data.resourcesUsed is list &&
              request.resource.data.resourcesUsed.size() <= 50 &&
-             isValidString('engSentence', 1, 1000) &&
-             isValidString('vieSentence', 1, 1000) &&
+             isValidString('engSentence', 0, 2000) &&
+             isValidString('vieSentence', 0, 2000) &&
              isValidNumber('rTotal') &&
              isValidNumber('iValue') &&
              isValidNumber('uTotal') &&
-             isValidString('category', 1, 100) &&
-             isValidString('difficultyLabel', 1, 100) &&
-             request.resource.data.userId == request.auth.uid;
+             isValidString('category', 0, 100) &&
+             isValidString('difficultyLabel', 0, 100);
     }
 
     function isValidAISettings() {
       return hasRequiredFields(['endpoint', 'apiKey', 'primaryModel', 'fallbackModel']) &&
-             isValidString('endpoint', 1, 500) &&
-             isValidString('apiKey', 1, 500) &&
-             isValidString('primaryModel', 1, 200) &&
-             isValidString('fallbackModel', 1, 200) &&
-             (!('elevenLabsApiKey' in request.resource.data) || isValidString('elevenLabsApiKey', 1, 500)) &&
-             (!('elevenLabsModel' in request.resource.data) || isValidString('elevenLabsModel', 1, 200)) &&
-             (!('elevenLabsVoiceId' in request.resource.data) || isValidString('elevenLabsVoiceId', 1, 200));
+             isValidString('endpoint', 0, 500) &&
+             isValidString('apiKey', 0, 500) &&
+             isValidString('primaryModel', 0, 200) &&
+             isValidString('fallbackModel', 0, 200) &&
+             (!('elevenLabsApiKey' in request.resource.data) || isValidString('elevenLabsApiKey', 0, 500)) &&
+             (!('elevenLabsModel' in request.resource.data) || isValidString('elevenLabsModel', 0, 200)) &&
+             (!('elevenLabsVoiceId' in request.resource.data) || isValidString('elevenLabsVoiceId', 0, 200));
     }
 
     // ===============================================================
@@ -69,15 +67,14 @@ service cloud.firestore {
 
       match /resources/{resourceId} {
         allow read: if isAuthenticated();
-        // Allow any authenticated user to create/update/delete in the shared workspace
-        allow create: if isAuthenticated() && isValidResource();
+        allow create: if isAuthenticated() && isValidResource() && request.resource.data.userId == request.auth.uid;
         allow update: if isAuthenticated() && isValidResource() && request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if isAuthenticated();
       }
 
       match /chunks/{chunkId} {
         allow read: if isAuthenticated();
-        allow create: if isAuthenticated() && isValidChunk();
+        allow create: if isAuthenticated() && isValidChunk() && request.resource.data.userId == request.auth.uid;
         allow update: if isAuthenticated() && isValidChunk() && request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if isAuthenticated();
       }
