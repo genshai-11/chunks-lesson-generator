@@ -24,6 +24,13 @@ export default function SettingsTab() {
       'Short': { maxSentences: 2, maxWords: 30 },
       'Medium': { maxSentences: 3, maxWords: 60 },
       'Long': { maxSentences: 5, maxWords: 100 }
+    },
+    formulaType: 'sum',
+    complexityMultipliers: {
+      'Very Short': 1,
+      'Short': 1.5,
+      'Medium': 2,
+      'Long': 2.5
     }
   });
   const [loading, setLoading] = useState(true);
@@ -57,6 +64,17 @@ export default function SettingsTab() {
               'Short': { maxSentences: 2, maxWords: 30 },
               'Medium': { maxSentences: 3, maxWords: 60 },
               'Long': { maxSentences: 5, maxWords: 100 }
+            };
+          }
+          if (!data.formulaType) {
+            data.formulaType = 'sum';
+          }
+          if (!data.complexityMultipliers) {
+            data.complexityMultipliers = {
+              'Very Short': 1,
+              'Short': 1.5,
+              'Medium': 2,
+              'Long': 2.5
             };
           }
           setSettings(data);
@@ -692,6 +710,13 @@ export default function SettingsTab() {
                     await setDoc(docRef, {
                       ohmPromptInstructions: settings.ohmPromptInstructions || null,
                       ohmBaseValues: settings.ohmBaseValues || null,
+                      formulaType: settings.formulaType || 'sum',
+                      complexityMultipliers: settings.complexityMultipliers || {
+                        'Very Short': 1,
+                        'Short': 1.5,
+                        'Medium': 2,
+                        'Long': 2.5
+                      },
                     }, { merge: true });
                     alert('Ohm Configuration saved successfully!');
                   } catch (error) {
@@ -738,7 +763,7 @@ export default function SettingsTab() {
               
               <div className="pt-6 border-t border-gray-100">
                 <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
-                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> Base Ohm Values
+                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> Base Ohm (R) Values
                 </label>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
@@ -758,6 +783,59 @@ export default function SettingsTab() {
                       />
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
+                      <Sparkles className="w-4 h-4 mr-2 text-gray-400" /> Calculation Formula
+                    </label>
+                    <div className="flex bg-gray-100 p-1 rounded-xl">
+                      <button
+                        onClick={() => setSettings({ ...settings, formulaType: 'sum' })}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                          settings.formulaType === 'sum' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'
+                        }`}
+                      >
+                        Sum (R1+R2...)
+                      </button>
+                      <button
+                        onClick={() => setSettings({ ...settings, formulaType: 'circuit' })}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                          settings.formulaType === 'circuit' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'
+                        }`}
+                      >
+                        Series-Parallel
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
+                      <Sparkles className="w-4 h-4 mr-2 text-gray-400" /> Complexity Adjuster
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                    {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
+                      <div key={len} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
+                        <span className="text-[9px] font-bold text-gray-500 uppercase">{len}</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.complexityMultipliers?.[len] ?? (len === 'Very Short' ? 1 : len === 'Short' ? 1.5 : len === 'Medium' ? 2 : 2.5)}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            complexityMultipliers: {
+                              ...(settings.complexityMultipliers || { 'Very Short': 1, 'Short': 1.5, 'Medium': 2, 'Long': 2.5 }),
+                              [len]: Number(e.target.value)
+                            }
+                          })}
+                          className="w-12 text-right bg-transparent border-none p-0 text-xs font-bold focus:ring-0 text-red-600"
+                        />
+                      </div>
+                    ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -933,7 +1011,11 @@ fetch('${window.location.origin.replace('-dev', '')}/api/transcribe', {
   },
   body: JSON.stringify({
     transcript: "Text to analyze...",
-    settings: { ohmBaseValues: { Green: 5, Blue: 7, Red: 9, Pink: 3 } },
+    settings: { 
+      ohmBaseValues: { Green: 5, Blue: 7, Red: 9, Pink: 3 },
+      formulaType: "sum",
+      complexityMultipliers: { "Very Short": 1, "Short": 1.5, "Medium": 2, "Long": 2.5 }
+    },
     webhookUrl: "https://your-server.com/callback" // Optional
   })
 })`;

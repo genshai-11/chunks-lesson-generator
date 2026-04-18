@@ -383,6 +383,11 @@ export async function generateAutoChunks(params: AutoGenerateParams): Promise<Au
     ohm: r.ohm
   }));
 
+  const formulaType = settings?.formulaType || 'sum';
+  const physicsLogic = formulaType === 'sum' 
+    ? `- R_total = Sum of all individual resource Ohms (R1 + R2 + R3 + ...). (Example: 5 + 9 + 3 = 17)`
+    : `- R_total = Sum(R) for same-color series, then Product of those sums for different colors.`;
+
 const prompt = `
 You are a Master Linguistic Architect for the "CHUNKS" EdTech system.
 Your mission is to construct ${quantity} high-quality learning chunks.
@@ -399,8 +404,8 @@ Available Ingredients (Resources):
 ${JSON.stringify(resourceList)}
 
 Physics Logic:
-- R_total = Sum(R) for same-color series, then Product of those sums for different colors.
-- U = I * R_total (I is the complexity multiplier, default 1.0-2.0).
+${physicsLogic}
+- U = Complexity Multiplier * R_total.
 
 Construction Flow:
 1. Resource Selection: Pick 2-4 resources that mathematically approach the Target U.

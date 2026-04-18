@@ -32,7 +32,6 @@ const MultiMeter = ({ label, value, unit, colorClass, icon: Icon, description }:
     </div>
   </div>
 );
-import { ColorCategory } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 
 interface DraftChunk {
@@ -81,9 +80,7 @@ export default function MixerTab() {
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Medium');
-  const [aiComplexityBias, setAiComplexityBias] = useState<number>(1.5);
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
-  const [rFormulaMode, setRFormulaMode] = useState<'circuit' | 'linear'>('circuit');
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -186,24 +183,29 @@ export default function MixerTab() {
   const calculateOhm = (usedResources: Resource[]) => {
     if (usedResources.length === 0) return 0;
     
-    // Correct Circuit Formula (must match aiService / Audio test):
-    // Same color = ADD (Series)
-    // Different colors = MULTIPLY (Parallel)
-    const groups: Record<string, number[]> = {};
-    usedResources.forEach(r => {
-      if (!groups[r.color]) groups[r.color] = [];
-      groups[r.color].push(r.ohm);
-    });
-    
-    // Sum within each color group
-    const colorSums = Object.values(groups).map(group => 
-      group.reduce((sum, ohm) => sum + ohm, 0)
-    );
-    
-    // Multiply the sums of different colors
-    const totalOhm = colorSums.reduce((prod, val) => prod * val, 1);
-    
-    return Math.round(totalOhm * 10) / 10;
+    const formulaType = aiSettings?.formulaType || 'sum';
+
+    if (formulaType === 'sum') {
+      // Linear Sum Formula: R1 + R2 + R3...
+      const totalOhm = usedResources.reduce((sum, r) => sum + r.ohm, 0);
+      return Math.round(totalOhm * 10) / 10;
+    } else {
+      // Circuit Formula (Series-Parallel):
+      // Same color = ADD (Series)
+      // Different colors = MULTIPLY (Parallel)
+      const groups: Record<string, number[]> = {};
+      usedResources.forEach(r => {
+        if (!groups[r.color]) groups[r.color] = [];
+        groups[r.color].push(r.ohm);
+      });
+      
+      const colorSums = Object.values(groups).map(group => 
+        group.reduce((sum, ohm) => sum + ohm, 0)
+      );
+      
+      const totalOhm = colorSums.reduce((prod, val) => prod * val, 1);
+      return Math.round(totalOhm * 10) / 10;
+    }
   };
 
   const handlePrepareBlueprint = () => {
@@ -291,12 +293,13 @@ export default function MixerTab() {
       }
 
       if (currentCombo.length > 0) {
-        // Base I calculation based on complexity bias
-        const baseI = aiComplexityBias;
+        // Multiplier from settings based on sentence length
+        const multiplier = aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? 
+          (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5);
         
         // Add minimal jitter (+/- 0.1) to keep it organic
         const jitter = (Math.random() * 0.2) - 0.1;
-        const finalI = Math.max(0.1, Math.round((baseI + jitter) * 10) / 10);
+        const finalI = Math.max(0.1, Math.round((multiplier + jitter) * 10) / 10);
         const finalU = Math.round((currentOhm * finalI) * 10) / 10;
 
         newDrafts.push({
@@ -584,32 +587,6 @@ export default function MixerTab() {
                         />
                       </div>
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Calculation Formula</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => setRFormulaMode('circuit')}
-                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                            rFormulaMode === 'circuit'
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100'
-                              : 'bg-white text-gray-400 border-gray-200 hover:border-blue-300'
-                          }`}
-                        >
-                          Series-Parallel
-                        </button>
-                        <button
-                          onClick={() => setRFormulaMode('linear')}
-                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                            rFormulaMode === 'linear'
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100'
-                              : 'bg-white text-gray-400 border-gray-200 hover:border-emerald-300'
-                          }`}
-                        >
-                          Linear Sum
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -669,14 +646,7 @@ export default function MixerTab() {
                     {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
                       <button
                         key={len}
-                        onClick={() => {
-                          setAiSentenceLength(len);
-                          // Auto-adjust bias when changing length preset
-                          if (len === 'Very Short') setAiComplexityBias(0.5);
-                          if (len === 'Short') setAiComplexityBias(0.8);
-                          if (len === 'Medium') setAiComplexityBias(1.5);
-                          if (len === 'Long') setAiComplexityBias(2.5);
-                        }}
+                        onClick={() => setAiSentenceLength(len)}
                         className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-center leading-tight ${
                           aiSentenceLength === len ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
                         }`}
@@ -686,25 +656,12 @@ export default function MixerTab() {
                     ))}
                   </div>
 
-                  {/* Manual Bias Control */}
-                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100">
-                    <div className="flex justify-between items-center mb-2">
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Complexity (I) Adjuster</label>
-                       <span className="text-xs font-black text-red-600">×{aiComplexityBias.toFixed(1)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="5.0"
-                      step="0.1"
-                      value={aiComplexityBias}
-                      onChange={(e) => setAiComplexityBias(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
-                    />
-                    <div className="flex justify-between mt-1 text-[8px] font-bold text-gray-400 uppercase tracking-tighter">
-                      <span>Linear (0.5)</span>
-                      <span>Sophisticated (5.0)</span>
-                    </div>
+                  {/* Multiplier Info */}
+                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100 flex justify-between items-center">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Complexity Adjuster</label>
+                    <span className="text-xs font-black text-red-600 leading-none">
+                      ×{aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5)}
+                    </span>
                   </div>
                 </div>
               </div>

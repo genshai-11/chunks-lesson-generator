@@ -32,6 +32,8 @@ export interface Chunk {
   createdAt: string;
 }
 
+export type FormulaType = 'sum' | 'circuit';
+
 export type TTSProvider = 'elevenlabs' | 'deepgram';
 
 export interface AISettings {
@@ -46,6 +48,8 @@ export interface AISettings {
   deepgramApiKey?: string;
   deepgramModel?: string;
   ohmPromptInstructions?: string;
+  formulaType?: FormulaType;
+  complexityMultipliers?: Record<SentenceLength, number>;
   ohmBaseValues?: {
     Green: number;
     Blue: number;
