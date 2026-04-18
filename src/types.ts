@@ -40,4 +40,5 @@ export interface AISettings {
     Red: number;
     Pink: number;
   };
+  m2mApiKey?: string;
 }

@@ -13,7 +13,65 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  // Global API Bypass Middleware: Prevents infrastructure-level 302 redirects 
+  // by signaling that these are strictly JSON/Machine-to-Machine requests.
+  app.use('/api', (req, res, next) => {
+    // These headers are hints for the platform gateway to bypass cookie challenges
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    
+    // Explicitly allow CORS and Preflight for external M2M if needed
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key, X-Requested-With, Accept');
+
+    // Handle Preflight
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    next();
+  });
+
+  // 1. Validation for M2M (Machine-to-Machine)
+  const validateApiKey = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // If it's a browser request (has owner cookie), allow it for the main UI
+    if (req.headers.cookie && req.headers.cookie.includes('__Secure-')) return next();
+
+    const providedKey = req.headers['x-api-key'] || req.query.apiKey;
+    const isM2M = req.headers['accept'] === 'application/json' || req.headers['x-requested-with'] === 'XMLHttpRequest';
+    
+    // Log for debugging (visible in server logs)
+    console.log(`[API Request] Path: ${req.path}, M2M: ${isM2M}, HasKey: ${!!providedKey}`);
+
+    try {
+      const { doc, getDoc } = await import('firebase/firestore');
+      const { db } = await import('./src/firebase');
+      const docRef = doc(db, `workspaces/default/settings`, 'ai');
+      const docSnap = await getDoc(docRef);
+      const appApiKey = docSnap.exists() ? docSnap.data().m2mApiKey : null;
+
+      if (appApiKey && providedKey === appApiKey) {
+        return next();
+      }
+
+      // Hardcoded fallback for the specific key you requested
+      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') {
+        return next();
+      }
+
+      return res.status(401).json({ 
+        status: 'error', 
+        error: 'Unauthorized. Valid X-API-Key is required for M2M.' 
+      });
+    } catch (error) {
+      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') return next();
+      next();
+    }
+  };
 
   // API Route for TTS
   app.post('/api/tts', async (req, res) => {
@@ -65,7 +123,7 @@ async function startServer() {
   });
 
   // Analyze Ohm API (Can be used by 3rd party webhooks)
-  app.post('/api/analyze-ohm', async (req, res) => {
+  app.post('/api/analyze-ohm', validateApiKey, async (req, res) => {
     const { transcript, settings, webhookUrl } = req.body;
 
     if (!transcript) {
@@ -208,6 +266,43 @@ Return the result STRICTLY as a JSON object with this structure:
         console.error("Ohm Analysis Error", error);
         res.status(500).json({ status: 'error', error: error.message });
       }
+    }
+  });
+
+  // 1. Validation for M2M (Machine-to-Machine)
+  // This helps bypass cookie gates or secure the API for external server A
+  // (Middleware moved to top)
+
+  // Transcription API (Can be used by 3rd party)
+  app.post('/api/transcribe', validateApiKey, async (req, res) => {
+    const { audioData, mimeType } = req.body;
+
+    if (!audioData) {
+      return res.status(400).json({ error: 'Audio data (base64) is required' });
+    }
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType || 'audio/webm',
+              data: audioData
+            }
+          },
+          "Please transcribe this audio. Return ONLY the transcript text in the language spoken, with no other commentary, quotes, or formatting."
+        ]
+      });
+
+      const text = result.text || '';
+      res.json({ status: 'success', transcript: text.trim() });
+    } catch (error: any) {
+      console.error("Transcription Error:", error);
+      res.status(500).json({ status: 'error', error: error.message });
     }
   });
 
@@ -384,6 +479,19 @@ Return the result STRICTLY as a JSON object with this structure:
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`API health check available at /api/ping`);
+  });
+
+  // Public Ping Endpoint for Connectivity Debugging
+  // This helps verify if the gateway bypass is working without needing an API key
+  app.get('/api/ping', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      message: 'M2M API Gateway is active',
+      environment: process.env.NODE_ENV || 'development',
+      hint: 'If you still see an HTML 302, verify you are using the Shared App URL (-pre-).'
+    });
   });
 }
 

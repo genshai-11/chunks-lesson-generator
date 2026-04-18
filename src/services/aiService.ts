@@ -85,11 +85,16 @@ export async function analyzeTranscript(transcript: string, settings?: AISetting
   const ohms = settings?.ohmBaseValues || baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
   
   const defaultInstructions = `
-You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:
-- GREEN (${ohms.Green} Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
-- BLUE (${ohms.Blue} Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
-- RED (${ohms.Red} Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
-- PINK (${ohms.Pink} Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").
+Bạn là một chuyên gia phân tích ngôn ngữ học tiếng Việt. Hãy bóc tách Transcript thành các cụm từ (Semantic Chunks) mang năng lượng Ohm:
+- GREEN (${ohms.Green} Ohm): Quán ngữ, từ nối, từ lặp, fillers. Ví dụ: "Thành thật mà nói", "Một ngày nào đó", "ờ thì".
+- BLUE (${ohms.Blue} Ohm): Khung câu, mẫu câu giao tiếp. Ví dụ: "Tôi tin rằng...", "Có thể nói là...", "Chúng ta nên...".
+- RED (${ohms.Red} Ohm): Thành ngữ, từ láy, ngôn ngữ hình ảnh. Ví dụ: "Nỗi sợ", "Vượt qua", "Mạnh mẽ lên".
+- PINK (${ohms.Pink} Ohm): Từ khóa chuyên môn hoặc khái niệm chính. Ví dụ: "Tâm lý học", "Kế toán".
+
+QUY TẮC CỐT LÕI:
+1. KHÔNG ĐỂ KẾT QUẢ TRỐNG: Nếu câu có nghĩa, bạn PHẢI tìm ra ít nhất một cụm từ để phân loại. Đừng quá khắt khe.
+2. Ưu tiên bóc tách các cấu trúc giúp người nghe hiểu ý đồ người nói (BLUE) và các từ mang sắc thái (RED/GREEN).
+3. TRÁNH VỠ VỤN: Gộp các fillers đứng cạnh nhau thành 1 chunk.
 `;
 
   const systemInstructions = settings?.ohmPromptInstructions && settings.ohmPromptInstructions.trim() !== '' 
@@ -142,6 +147,13 @@ Return the result STRICTLY as a JSON object with this structure:
     const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) || responseText.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : responseText;
     const result = JSON.parse(jsonString) as OhmAnalysisResult;
+    
+    // Fallback: If AI parsed successfully but found 0 chunks for a non-empty transcript
+    if ((!result.chunks || result.chunks.length === 0) && transcript.trim().length > 5) {
+      result.totalOhm = 1;
+      result.formula = "1 (Base Energy)";
+    }
+    
     return result;
   } catch (error) {
     console.error("Failed to parse analysis result:", responseText);
