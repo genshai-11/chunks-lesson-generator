@@ -164,9 +164,9 @@ export default function ChunksTab() {
       'English Sentence': c.engSentence,
       'Vietnamese Sentence': c.vieSentence,
       'Difficulty': c.difficultyLabel,
-      'U (Total)': c.uTotal,
-      'R (Ohm)': c.rTotal,
-      'I (Intensity)': c.iValue,
+      'Ohm (Total)': c.uTotal,
+      'Load (Base R)': c.rTotal,
+      'Bias (Multiplier)': c.iValue,
       'Audio URL': c.audioUrl || 'N/A',
       'Resources Used': c.resourcesUsed.map(r => typeof r === 'string' ? r : r.name).join(', ')
     }));
@@ -406,7 +406,7 @@ export default function ChunksTab() {
                   </div>
                   {/* U Values */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">U (Difficulty)</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Total Ohm</label>
                     <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
                       {uniqueUs.map(u => (
                         <label key={u} className="flex items-center gap-3 text-sm cursor-pointer group">
@@ -424,7 +424,7 @@ export default function ChunksTab() {
                   </div>
                   {/* R Values */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">R (Ohm)</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Load (Base)</label>
                     <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
                       {uniqueRs.map(r => (
                         <label key={r} className="flex items-center gap-3 text-sm cursor-pointer group">
@@ -442,7 +442,7 @@ export default function ChunksTab() {
                   </div>
                   {/* I Values */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">I (Intensity)</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Bias (Multiplier)</label>
                     <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
                       {uniqueIs.map(i => (
                         <label key={i} className="flex items-center gap-3 text-sm cursor-pointer group">
@@ -554,14 +554,14 @@ export default function ChunksTab() {
                    </div>
                    <div className="flex-1">
                      <div className="flex items-center gap-3 mb-2">
-                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                         {chunk.difficultyLabel} (U={chunk.uTotal.toFixed(1)})
+                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-800 uppercase tracking-tight">
+                         {chunk.difficultyLabel} • {chunk.uTotal.toFixed(0)}Ω
                        </span>
-                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 uppercase tracking-tight">
                          {chunk.category}
                        </span>
-                       <div className="text-xs text-gray-500">
-                         R={chunk.rTotal.toFixed(1)} • I={chunk.iValue.toFixed(1)}
+                       <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                         Load: {chunk.rTotal.toFixed(0)}Ω • Bias: ×{chunk.iValue.toFixed(1)}
                        </div>
                      </div>
                      

@@ -213,7 +213,7 @@ export default function PlayerTab() {
           </div>
 
           <div>
-             <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">R (Ohm)</label>
+             <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Load (Sum R)</label>
              <div className="flex flex-wrap gap-1 max-h-[60px] overflow-y-auto w-full pr-1 hide-scrollbar">
                 {uniqueRs.length > 0 ? (
                   uniqueRs.map(r => (
@@ -224,7 +224,7 @@ export default function PlayerTab() {
                         onChange={() => toggleRFilter(r)} 
                         className="w-3 h-3 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer" 
                       />
-                      <span className={`font-medium ${selectedRs.has(r) ? 'text-red-700' : 'text-gray-600'}`}>{r.toFixed(1)}</span>
+                      <span className={`font-medium ${selectedRs.has(r) ? 'text-red-700' : 'text-gray-600'}`}>{r.toFixed(0)}</span>
                     </label>
                   ))
                 ) : (
@@ -236,7 +236,7 @@ export default function PlayerTab() {
           <div className="text-[10px] font-medium text-gray-500 flex justify-between mt-1">
             <span>Showing {filteredChunks.length} chunks</span>
             {selectedRs.size > 0 && (
-              <button onClick={() => setSelectedRs(new Set())} className="text-red-500 hover:text-red-600 font-bold">Clear R</button>
+              <button onClick={() => setSelectedRs(new Set())} className="text-red-500 hover:text-red-600 font-bold">Clear Load</button>
             )}
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function PlayerTab() {
                 {chunk.vieSentence}
               </p>
               <div className="mt-2 flex items-center justify-between">
-                <span className={`text-xs ${idx === currentIndex ? 'text-red-600' : 'text-gray-500'}`}>U: {chunk.uTotal}</span>
+                <span className={`text-xs ${idx === currentIndex ? 'text-red-600' : 'text-gray-500'}`}>Ohm: {chunk.uTotal.toFixed(0)}</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${idx === currentIndex ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
                   {chunk.category || 'Uncategorized'}
                 </span>

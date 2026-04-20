@@ -257,22 +257,19 @@ export default function MixerTab() {
         let bestCombo: Resource[] = [];
         let bestOhm = 0;
         let attempts = 0;
-        const maxAttempts = 300; // Increased search depth
+        const maxAttempts = 500; 
         
         while (attempts < maxAttempts) {
           let testCombo: Resource[] = [];
           
-          const numColorsToMix = Math.min(
-            availableColors.length, 
-            Math.max(2, Math.floor(Math.random() * availableColors.length) + 1)
-          );
+          // Vary the number of colors to mix to avoid always being "full"
+          const numColorsToMix = Math.max(1, Math.floor(Math.random() * availableColors.length) + 1);
           const shuffledColors = [...availableColors].sort(() => 0.5 - Math.random()).slice(0, numColorsToMix);
 
           shuffledColors.forEach(color => {
             const itemsInColor = resourcesByColor[color];
-            // If target is high, temporarily allow more keywords to reach the Ohm goal
-            const effectiveMax = aiTargetOhm > 50 ? Math.max(aiMaxPerColor, 4) : aiMaxPerColor;
-            const limit = Math.min(effectiveMax, itemsInColor.length);
+            const limit = Math.min(aiMaxPerColor, itemsInColor.length);
+            // Randomly decide how many items from this color to add
             const numItems = Math.floor(Math.random() * limit) + 1;
             const shuffledItems = [...itemsInColor].sort(() => 0.5 - Math.random()).slice(0, numItems);
             testCombo.push(...shuffledItems);
@@ -285,7 +282,8 @@ export default function MixerTab() {
             bestOhm = testOhm;
           }
           
-          if (Math.abs(bestOhm - aiTargetOhm) <= (aiTargetOhm * 0.05)) break; // 5% tolerance
+          // Targeted accuracy: +/- 3 Ohm
+          if (Math.abs(bestOhm - aiTargetOhm) <= 3) break; 
           attempts++;
         }
         currentCombo = bestCombo;
@@ -555,7 +553,7 @@ export default function MixerTab() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Ohm (R)</label>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Load (R)</label>
                         <input
                           type="number"
                           value={aiTargetOhm}
@@ -772,13 +770,18 @@ export default function MixerTab() {
                       {/* Left Sidebar: Metrics */}
                       <div className="w-24 bg-gray-50/50 border-r border-gray-100 p-4 flex flex-col items-center justify-center space-y-4">
                         <div className="text-center">
-                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Load</span>
-                          <div className="text-sm font-black text-gray-900">{draft.rTotal.toFixed(0)}Ω</div>
+                          <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter">Ohm</span>
+                          <div className="text-lg font-black text-gray-900 leading-tight">{draft.uTotal.toFixed(0)}Ω</div>
                         </div>
                         <div className="w-full h-px bg-gray-200" />
-                        <div className="text-center">
-                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter italic">Bias (I)</span>
-                          <div className="text-sm font-black text-gray-900 leading-none">×{draft.iValue.toFixed(1)}</div>
+                        <div className="text-center px-1">
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Load</span>
+                          <div className="text-xs font-black text-gray-700">{draft.rTotal.toFixed(0)}Ω</div>
+                        </div>
+                        <div className="w-full h-px bg-gray-200" />
+                        <div className="text-center px-1">
+                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter italic whitespace-nowrap">Bias (I)</span>
+                          <div className="text-xs font-black text-gray-700 leading-none">×{draft.iValue.toFixed(1)}</div>
                         </div>
                         <div className="w-full h-px bg-gray-200" />
                         <div className="flex flex-col space-y-1">
