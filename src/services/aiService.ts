@@ -189,17 +189,31 @@ export async function fetchOpenRouterModels(apiKey: string, endpoint: string = '
 }
 
 async function callAI(prompt: string, settings?: AISettings): Promise<string> {
-  if (!settings || !settings.apiKey) {
-    // Use default Gemini
-    const response = await defaultAi.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: prompt,
-    });
-    if (!response.text) throw new Error("No response from Gemini");
-    return response.text;
+  const apiKey = settings?.apiKey;
+  const primaryModel = settings?.primaryModel || 'gemini-2.0-flash';
+  const fallbackModel = settings?.fallbackModel || 'gemini-1.5-flash';
+
+  // If no custom API key is provided, we use the default Gemini client with the configured model
+  if (!apiKey) {
+    try {
+      const response = await defaultAi.models.generateContent({
+        model: primaryModel,
+        contents: prompt,
+      });
+      if (response.text) return response.text;
+    } catch (error) {
+      console.warn(`Default model ${primaryModel} failed, trying fallback ${fallbackModel}:`, error);
+      const response = await defaultAi.models.generateContent({
+        model: fallbackModel,
+        contents: prompt,
+      });
+      if (!response.text) throw new Error("No response from Gemini fallback");
+      return response.text;
+    }
+    throw new Error("Failed to get response from Gemini");
   }
 
-  const { endpoint, apiKey, primaryModel, fallbackModel } = settings;
+  const { endpoint } = settings;
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
   let lastError = null;
 
