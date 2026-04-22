@@ -80,6 +80,7 @@ export default function MixerTab() {
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Medium');
+  const [isColorFocusOn, setIsColorFocusOn] = useState<boolean>(true);
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
@@ -220,9 +221,15 @@ export default function MixerTab() {
 
     const newDrafts: DraftChunk[] = [];
     
+    // Calculate exact base multiplier needed for this sentence length
+    const baseMultiplier = aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? 
+      (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5);
+    
     for (let i = 0; i < aiQuantity; i++) {
       let currentCombo: Resource[] = [];
-      let currentOhm = 0;
+      let currentOhm = 0; // This is the Base R
+      
+      const finalI = Math.max(0.1, Math.round(baseMultiplier * 10) / 10);
 
       if (blueprintMode === 'recipe') {
         // Recipe Mode: Pick exactly the number of items specified for each color
@@ -239,9 +246,11 @@ export default function MixerTab() {
         });
         currentOhm = calculateOhm(currentCombo);
       } else {
-        // Target Ohm Mode: Use existing logic
-        // Filter by color preferences
-        const filteredResources = resources.filter(r => aiColors.length === 0 || aiColors.includes(r.color));
+        // Target Ohm Mode: Find Base R by dividing Target Total Ohm by Multiplier
+        const targetR = aiTargetOhm / finalI;
+
+        // Filter by color preferences if ON, otherwise use all available resources
+        const filteredResources = resources.filter(r => (!isColorFocusOn || aiColors.length === 0 || aiColors.includes(r.color)));
         if (filteredResources.length === 0) {
           if (i === 0) showToast("No resources match your color preferences.");
           return;
@@ -255,7 +264,7 @@ export default function MixerTab() {
         const availableColors = Object.keys(resourcesByColor);
 
         let bestCombo: Resource[] = [];
-        let bestOhm = 0;
+        let bestBaseR = 0;
         let attempts = 0;
         const maxAttempts = 500; 
         
@@ -275,29 +284,23 @@ export default function MixerTab() {
             testCombo.push(...shuffledItems);
           });
 
-          const testOhm = calculateOhm(testCombo);
+          const testBaseR = calculateOhm(testCombo);
           
-          if (attempts === 0 || Math.abs(testOhm - aiTargetOhm) < Math.abs(bestOhm - aiTargetOhm)) {
+          if (attempts === 0 || Math.abs(testBaseR - targetR) < Math.abs(bestBaseR - targetR)) {
             bestCombo = testCombo;
-            bestOhm = testOhm;
+            bestBaseR = testBaseR;
           }
           
-          // Targeted accuracy: +/- 3 Ohm
-          if (Math.abs(bestOhm - aiTargetOhm) <= 3) break; 
+          // Targeted accuracy: ensure the FINAL ohm is within +/- 3 of requested Target
+          const testFinalU = testBaseR * finalI;
+          if (Math.abs(testFinalU - aiTargetOhm) <= 3) break; 
           attempts++;
         }
         currentCombo = bestCombo;
-        currentOhm = bestOhm;
+        currentOhm = bestBaseR;
       }
 
       if (currentCombo.length > 0) {
-        // Multiplier from settings based on sentence length
-        const multiplier = aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? 
-          (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5);
-        
-        // Add minimal jitter (+/- 0.1) to keep it organic
-        const jitter = (Math.random() * 0.2) - 0.1;
-        const finalI = Math.max(0.1, Math.round((multiplier + jitter) * 10) / 10);
         const finalU = Math.round((currentOhm * finalI) * 10) / 10;
 
         newDrafts.push({
@@ -553,7 +556,7 @@ export default function MixerTab() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Load (R)</label>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Total Ohm (U)</label>
                         <input
                           type="number"
                           value={aiTargetOhm}
@@ -667,24 +670,41 @@ export default function MixerTab() {
               {blueprintMode === 'targetOhm' && (
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Color Focus Preferences</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => toggleAiColor(color as ColorCategory)}
-                          className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
-                            aiColors.includes(color as ColorCategory)
-                              ? 'bg-red-50 border-red-200 text-red-600'
-                              : 'bg-white border-gray-200 text-gray-400 hover:border-red-200 shadow-sm'
-                          }`}
-                        >
-                          {color}
-                          {aiColors.includes(color as ColorCategory) && <CheckCircle2 className="w-3.5 h-3.5" />}
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-xs font-black text-gray-400 uppercase tracking-widest">Color Focus Preferences</label>
+                      <button 
+                        onClick={() => setIsColorFocusOn(!isColorFocusOn)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isColorFocusOn ? 'bg-red-500' : 'bg-gray-200'}`}
+                      >
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${isColorFocusOn ? 'translate-x-4' : 'translate-x-1'}`} />
+                      </button>
                     </div>
-                    <p className="mt-3 text-[10px] text-gray-400 font-bold uppercase tracking-wide italic">The AI will prioritize resources from these color groups.</p>
+
+                    {isColorFocusOn ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
+                            <button
+                              key={color}
+                              onClick={() => toggleAiColor(color as ColorCategory)}
+                              className={`flex items-center justify-between px-4 py-2.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+                                aiColors.includes(color as ColorCategory)
+                                  ? 'bg-red-50 border-red-200 text-red-600'
+                                  : 'bg-white border-gray-200 text-gray-400 hover:border-red-200 shadow-sm'
+                              }`}
+                            >
+                              {color}
+                              {aiColors.includes(color as ColorCategory) && <CheckCircle2 className="w-3.5 h-3.5" />}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-[10px] text-gray-400 font-bold uppercase tracking-wide italic">The AI will prioritize resources from these color groups.</p>
+                      </>
+                    ) : (
+                      <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 text-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Random Selection</span>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
@@ -765,47 +785,49 @@ export default function MixerTab() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
                 {draftChunks.map((draft, idx) => (
-                  <div key={draft.id} className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-red-200 transition-all duration-500 hover:shadow-2xl">
-                    <div className="flex">
-                      {/* Left Sidebar: Metrics */}
-                      <div className="w-24 bg-gray-50/50 border-r border-gray-100 p-4 flex flex-col items-center justify-center space-y-4">
-                        <div className="text-center">
-                          <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter">Ohm</span>
-                          <div className="text-lg font-black text-gray-900 leading-tight">{draft.uTotal.toFixed(0)}Ω</div>
+                  <div key={draft.id} className="group relative bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-red-200 transition-all duration-500 hover:shadow-2xl flex flex-col">
+                    {/* Top Bar: Metrics */}
+                    <div className="bg-gray-50/50 border-b border-gray-100 px-4 md:px-6 py-3 flex flex-row flex-wrap items-center justify-between gap-4">
+                      <div className="flex flex-row items-center gap-4 md:gap-6">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] md:text-xs font-black text-red-600 uppercase tracking-widest">Ohm</span>
+                          <div className="text-base md:text-lg font-black text-gray-900 leading-tight">{draft.uTotal.toFixed(0)}Ω</div>
                         </div>
-                        <div className="w-full h-px bg-gray-200" />
-                        <div className="text-center px-1">
-                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Load</span>
-                          <div className="text-xs font-black text-gray-700">{draft.rTotal.toFixed(0)}Ω</div>
+                        <div className="w-px h-5 bg-gray-300" />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest">Load</span>
+                          <div className="text-sm font-black text-gray-700">{draft.rTotal.toFixed(0)}Ω</div>
                         </div>
-                        <div className="w-full h-px bg-gray-200" />
-                        <div className="text-center px-1">
-                          <span className="text-[8px] font-black text-gray-400 uppercase tracking-tighter italic whitespace-nowrap">Bias (I)</span>
-                          <div className="text-xs font-black text-gray-700 leading-none">×{draft.iValue.toFixed(1)}</div>
-                        </div>
-                        <div className="w-full h-px bg-gray-200" />
-                        <div className="flex flex-col space-y-1">
-                          {Array.from(new Set(draft.resourcesUsed.map(r => r.color))).map((color: any) => (
-                            <div 
-                              key={color} 
-                              className={`w-2 h-2 mx-auto rounded-full shadow-sm border border-white/50 ${
-                                color === 'Green' ? 'bg-green-500' :
-                                color === 'Blue' ? 'bg-blue-500' :
-                                color === 'Red' ? 'bg-red-500' :
-                                color === 'Pink' ? 'bg-pink-500' :
-                                color === 'Yellow' ? 'bg-yellow-500' :
-                                color === 'Orange' ? 'bg-orange-500' :
-                                color === 'Purple' ? 'bg-purple-500' :
-                                'bg-gray-400'
-                              }`} 
-                              title={color} 
-                            />
-                          ))}
+                        <div className="w-px h-5 bg-gray-300" />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest italic">Bias</span>
+                          <div className="text-sm font-black text-gray-700 leading-none">×{draft.iValue.toFixed(1)}</div>
                         </div>
                       </div>
+                      
+                      <div className="flex flex-row items-center gap-1.5 ml-auto">
+                        {Array.from(new Set(draft.resourcesUsed.map(r => r.color))).map((color: any) => (
+                          <div 
+                            key={color} 
+                            className={`w-2.5 h-2.5 rounded-full shadow-sm border border-white/50 ${
+                              color === 'Green' ? 'bg-green-500' :
+                              color === 'Blue' ? 'bg-blue-500' :
+                              color === 'Red' ? 'bg-red-500' :
+                              color === 'Pink' ? 'bg-pink-500' :
+                              color === 'Yellow' ? 'bg-yellow-500' :
+                              color === 'Orange' ? 'bg-orange-500' :
+                              color === 'Purple' ? 'bg-purple-500' :
+                              'bg-gray-400'
+                            }`} 
+                            title={color} 
+                          />
+                        ))}
+                      </div>
+                    </div>
 
+                    <div className="flex flex-col flex-1">
                       {/* Main Area */}
-                      <div className="flex-1 p-6">
+                      <div className="flex-1 p-5 md:p-6">
                         <div className="flex flex-wrap gap-1.5 mb-6">
   {draft.resourcesUsed.map((r, ri) => (
     <span 

@@ -1,8 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 
-// Default Gemini client (fallback if no custom settings)
-const defaultAi = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// We lazily instantiate the Gemini client to avoid startup crashes if the key is completely missing
+function getGeminiClient(customKey?: string) {
+  const key = customKey || process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error('No Gemini API Key available. Please specify an API key in your AI Configuration.');
+  }
+  return new GoogleGenAI({ apiKey: key });
+}
 
 export interface GenerateChunkParams {
   resources: Resource[];
@@ -67,7 +73,7 @@ export async function transcribeAudio(audioBlob: Blob, settings?: AISettings): P
   });
 
   const apiKey = settings?.geminiApiKey || process.env.GEMINI_API_KEY;
-  const aiClient = apiKey && apiKey !== process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: apiKey as string }) : defaultAi;
+  const aiClient = getGeminiClient(apiKey);
   const modelToUse = settings?.audioTranscriptModel || 'gemini-2.5-flash';
 
   const response = await aiClient.models.generateContent({
@@ -196,14 +202,16 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
   // If no custom API key is provided, we use the default Gemini client with the configured model
   if (!apiKey) {
     try {
-      const response = await defaultAi.models.generateContent({
+      const gClient = getGeminiClient();
+      const response = await gClient.models.generateContent({
         model: primaryModel,
         contents: prompt,
       });
       if (response.text) return response.text;
     } catch (error) {
       console.warn(`Default model ${primaryModel} failed, trying fallback ${fallbackModel}:`, error);
-      const response = await defaultAi.models.generateContent({
+      const gClient = getGeminiClient();
+      const response = await gClient.models.generateContent({
         model: fallbackModel,
         contents: prompt,
       });
@@ -277,9 +285,10 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
     }
   }
 
-  console.warn('All configured models failed, falling back to default Gemini model.');
+  console.warn('All configured models failed, attempting to fall back to default Gemini model.');
   try {
-    const response = await defaultAi.models.generateContent({
+    const gClient = getGeminiClient();
+    const response = await gClient.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });

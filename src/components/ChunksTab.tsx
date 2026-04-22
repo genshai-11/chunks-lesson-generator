@@ -182,14 +182,15 @@ export default function ChunksTab() {
     document.body.removeChild(link);
   };
 
-  const handlePlayAudio = (chunk: Chunk) => {
-    if (chunk.audioUrl) {
-      const audio = new Audio(chunk.audioUrl);
+  const handlePlayAudio = (chunk: Chunk, lang: 'en' | 'vi' = 'en') => {
+    const url = lang === 'en' ? chunk.audioUrl : chunk.vieAudioUrl;
+    if (url) {
+      const audio = new Audio(url);
       audio.play();
     } else {
       // Fallback to basic TTS if no audioUrl is stored
-      const utterance = new SpeechSynthesisUtterance(chunk.engSentence);
-      utterance.lang = 'en-US';
+      const utterance = new SpeechSynthesisUtterance(lang === 'en' ? chunk.engSentence : chunk.vieSentence);
+      utterance.lang = lang === 'en' ? 'en-US' : 'vi-VN';
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -212,16 +213,23 @@ export default function ChunksTab() {
     setGeneratingAudioId(chunk.id);
     try {
       const currentSettings = await getLatestAiSettings();
-      const audioUrl = await generateAudio(chunk.engSentence, currentSettings);
-      if (audioUrl) {
-        await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), {
-          audioUrl: audioUrl
-        });
+      // Generate both English and Vietnamese audio concurrently
+      const [engAudioUrl, vieAudioUrl] = await Promise.all([
+        generateAudio(chunk.engSentence, currentSettings),
+        generateAudio(chunk.vieSentence, currentSettings)
+      ]);
+      
+      if (engAudioUrl || vieAudioUrl) {
+        const updateData: any = {};
+        if (engAudioUrl) updateData.audioUrl = engAudioUrl;
+        if (vieAudioUrl) updateData.vieAudioUrl = vieAudioUrl;
+        
+        await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), updateData);
         showToast("Audio generated successfully");
       }
     } catch (error: any) {
       console.error('Error generating audio:', error);
-      showToast(`Generation failed: ${error.message || 'Check ElevenLabs settings'}`);
+      showToast(`Generation failed: ${error.message || 'Check TTS settings'}`);
     } finally {
       setGeneratingAudioId(null);
     }
@@ -261,10 +269,10 @@ export default function ChunksTab() {
     if (!auth.currentUser || selectedIds.size === 0) return;
     setIsGeneratingBulkAudio(true);
     
-    const chunksToProcess = chunks.filter(c => selectedIds.has(c.id) && !c.audioUrl);
+    const chunksToProcess = chunks.filter(c => selectedIds.has(c.id) && (!c.audioUrl || !c.vieAudioUrl));
     
     if (chunksToProcess.length === 0) {
-      showToast("All selected chunks already have audio.");
+      showToast("All selected chunks already have complete audio.");
       setIsGeneratingBulkAudio(false);
       return;
     }
@@ -278,11 +286,18 @@ export default function ChunksTab() {
     for (const chunk of chunksToProcess) {
       setGeneratingAudioId(chunk.id);
       try {
-        const audioUrl = await generateAudio(chunk.engSentence, currentSettings);
-        if (audioUrl) {
-          await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), {
-            audioUrl: audioUrl
-          });
+        const updateData: any = {};
+        if (!chunk.audioUrl) {
+          const engAudioUrl = await generateAudio(chunk.engSentence, currentSettings);
+          if (engAudioUrl) updateData.audioUrl = engAudioUrl;
+        }
+        if (!chunk.vieAudioUrl) {
+          const vieAudioUrl = await generateAudio(chunk.vieSentence, currentSettings);
+          if (vieAudioUrl) updateData.vieAudioUrl = vieAudioUrl;
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          await updateDoc(doc(db, `workspaces/default/chunks`, chunk.id), updateData);
           successCount++;
         }
       } catch (error: any) {
@@ -567,27 +582,15 @@ export default function ChunksTab() {
                      
                      <div className="flex items-start gap-3">
                         <div className="flex flex-col gap-2 mt-1">
-                          <button 
-                            onClick={() => handlePlayAudio(chunk)}
-                            className={`p-1.5 rounded-full transition-colors ${
-                              chunk.audioUrl 
-                                ? 'bg-green-50 text-green-600 hover:bg-green-100' 
-                                : 'bg-red-50 text-red-600 hover:bg-red-100'
-                            }`}
-                            title={chunk.audioUrl ? "Play Saved Audio" : "Play Basic TTS"}
-                          >
-                            {chunk.audioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                          </button>
-                          
                           <button
                             onClick={() => handleGenerateAudio(chunk)}
                             disabled={generatingAudioId === chunk.id}
-                            className={`p-1.5 rounded-full transition-colors ${
+                            className={`p-1.5 rounded-full transition-colors flex justify-center items-center ${
                               generatingAudioId === chunk.id
                                 ? 'bg-gray-100 text-gray-400'
                                 : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                             }`}
-                            title={chunk.audioUrl ? "Regenerate Audio" : "Generate ElevenLabs Audio"}
+                            title="Generate/Refresh AI Audio (EN & VI)"
                           >
                             {generatingAudioId === chunk.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -596,11 +599,39 @@ export default function ChunksTab() {
                             )}
                           </button>
                         </div>
-                       <div>
-                         <p className="text-lg font-medium text-gray-900">{chunk.engSentence}</p>
-                         <p className="text-md text-gray-600 mt-1">{chunk.vieSentence}</p>
-                       </div>
-                     </div>
+                        <div className="flex-1 space-y-3">
+                          {/* English Row */}
+                          <div className="flex items-start gap-3">
+                            <button 
+                              onClick={() => handlePlayAudio(chunk, 'en')}
+                              className={`shrink-0 p-1.5 mt-0.5 rounded-full transition-colors ${
+                                chunk.audioUrl 
+                                  ? 'bg-green-50 text-green-600 hover:bg-green-100' 
+                                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                              title={chunk.audioUrl ? "Play AI English Audio" : "Play Basic TTS (EN)"}
+                            >
+                              {chunk.audioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                            </button>
+                            <p className="text-lg font-medium text-gray-900 leading-snug">{chunk.engSentence}</p>
+                          </div>
+                          {/* Vietnamese Row */}
+                          <div className="flex items-start gap-3">
+                            <button 
+                              onClick={() => handlePlayAudio(chunk, 'vi')}
+                              className={`shrink-0 p-1.5 mt-0.5 rounded-full transition-colors ${
+                                chunk.vieAudioUrl 
+                                  ? 'bg-green-50 text-green-600 hover:bg-green-100' 
+                                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                              title={chunk.vieAudioUrl ? "Play AI Vietnamese Audio" : "Play Basic TTS (VI)"}
+                            >
+                              {chunk.vieAudioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                            </button>
+                            <p className="text-md text-gray-600 leading-snug">{chunk.vieSentence}</p>
+                          </div>
+                        </div>
+                      </div>
                      
                      <div className="mt-4 flex flex-wrap gap-2">
                        {chunk.resourcesUsed.map((resource, idx) => (

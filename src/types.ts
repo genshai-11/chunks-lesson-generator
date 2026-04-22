@@ -28,6 +28,7 @@ export interface Chunk {
   difficultyLabel: string;
   evaluation?: string;
   audioUrl?: string | null;
+  vieAudioUrl?: string | null;
   userId: string;
   createdAt: string;
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Chunk } from '../types';
-import { Filter, ChevronLeft, ChevronRight, Volume2, Eye, EyeOff, VideoOff, Video } from 'lucide-react';
+import { Filter, ChevronLeft, ChevronRight, Volume2, Play, Eye, EyeOff, VideoOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function PlayerTab() {
@@ -143,11 +143,28 @@ export default function PlayerTab() {
     });
   };
 
-  const playVietnamese = () => {
+  const playVietnamese = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!currentChunk) return;
-    const utterance = new SpeechSynthesisUtterance(currentChunk.vieSentence);
-    utterance.lang = 'vi-VN';
-    speechSynthesis.speak(utterance);
+    if (currentChunk.vieAudioUrl) {
+      new Audio(currentChunk.vieAudioUrl).play();
+    } else {
+      const utterance = new SpeechSynthesisUtterance(currentChunk.vieSentence);
+      utterance.lang = 'vi-VN';
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const playEnglish = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentChunk) return;
+    if (currentChunk.audioUrl) {
+      new Audio(currentChunk.audioUrl).play();
+    } else {
+      const utterance = new SpeechSynthesisUtterance(currentChunk.engSentence);
+      utterance.lang = 'en-US';
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   const handleNext = () => {
@@ -328,10 +345,19 @@ export default function PlayerTab() {
                   })}
                 </div>
 
-                <div className="w-full text-center">
-                  <h3 className="text-sm sm:text-base md:text-lg font-normal text-white mb-6 leading-relaxed tracking-normal break-words">
+                <div className="w-full text-center relative group">
+                  <h3 className="text-sm sm:text-base md:text-lg font-normal text-white mb-6 leading-relaxed tracking-normal break-words inline-block">
                     {renderHighlightedSentence(currentChunk.vieSentence, currentChunk.resourcesUsed)}
                   </h3>
+                  {/* Tạm ẩn audio tiếng việt
+                  <button 
+                    onClick={playVietnamese}
+                    className="ml-3 p-2 rounded-full border border-white/10 hover:bg-white/10 text-white/50 hover:text-white transition-all inline-flex items-center align-middle"
+                    title={currentChunk.vieAudioUrl ? "Play AI Audio (VI)" : "Play basic TTS (VI)"}
+                  >
+                    {currentChunk.vieAudioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  */}
                 </div>
                 
 
@@ -345,20 +371,41 @@ export default function PlayerTab() {
                         className="absolute bottom-full mb-4 px-6 py-4 w-full max-w-lg text-center bg-black/80 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl z-20"
                       >
                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-black/80 border-r border-b border-white/10 rotate-45"></div>
-                        <p className="text-sm md:text-base font-medium text-white/90 leading-relaxed break-words">
-                          {renderHighlightedSentence(currentChunk.engSentence, currentChunk.resourcesUsed)}
-                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                          <p className="text-sm md:text-base font-medium text-white/90 leading-relaxed break-words">
+                            {renderHighlightedSentence(currentChunk.engSentence, currentChunk.resourcesUsed)}
+                          </p>
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
 
-                  <button
-                    onClick={() => setShowEnglish(!showEnglish)}
-                    className={`p-3 rounded-full border border-white/10 hover:bg-white/5 active:scale-95 transition-all group relative ${showEnglish ? 'text-white bg-white/10' : 'text-white/40 hover:text-white'}`}
-                    title="Translate to English"
-                  >
-                    {showEnglish ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
-                  </button>
+                  <div className="flex items-center justify-center gap-4 md:gap-6 bg-white/5 backdrop-blur-sm px-6 py-3 rounded-full border border-white/10">
+                    <div className="flex items-center gap-2 text-red-500 font-mono" title="Sentence Energy Value">
+                      <span className="font-extrabold text-lg md:text-xl">{currentChunk.rTotal}</span>
+                      <span className="text-xs md:text-sm uppercase tracking-widest opacity-80 font-medium">Ohm</span>
+                    </div>
+
+                    <div className="w-px h-6 bg-white/20 rounded-full"></div>
+
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <button
+                        onClick={() => setShowEnglish(!showEnglish)}
+                        className={`p-2.5 md:p-3 rounded-full transition-all group relative ${showEnglish ? 'text-white bg-white/20 shadow-inner' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+                        title="Translate to English"
+                      >
+                        {showEnglish ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
+                      </button>
+                      
+                      <button 
+                        onClick={playEnglish}
+                        className="p-2.5 md:p-3 rounded-full transition-all text-white/50 hover:text-white hover:bg-white/10"
+                        title={currentChunk.audioUrl ? "Play AI Audio (EN)" : "Play basic TTS (EN)"}
+                      >
+                        {currentChunk.audioUrl ? <Play className="w-5 h-5 md:w-6 md:h-6" /> : <Volume2 className="w-5 h-5 md:w-6 md:h-6" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             ) : (

@@ -214,7 +214,7 @@ export default function SettingsTab() {
     }
   };
 
-  const handlePreviewVoice = async () => {
+  const handlePreviewVoice = async (textToSpeak: string) => {
     if (settings.ttsProvider === 'elevenlabs' && (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId)) {
       alert('Please configure ElevenLabs API Key and Voice ID first.');
       return;
@@ -226,7 +226,7 @@ export default function SettingsTab() {
     
     setPreviewingVoice(true);
     try {
-      const audioUrl = await generateAudio(previewText, settings);
+      const audioUrl = await generateAudio(textToSpeak, settings);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
         await audio.play();
@@ -663,6 +663,7 @@ export default function SettingsTab() {
                     <option value="aura-perseus-en">Aura Perseus (English Male)</option>
                     <option value="aura-angus-en">Aura Angus (English Male)</option>
                     <option value="aura-orpheus-en">Aura Orpheus (English Male)</option>
+                    <option value="aura-2-zeus-en">Aura 2 Zeus (American English)</option>
                   </select>
                 </div>
               </div>
@@ -670,24 +671,44 @@ export default function SettingsTab() {
             )}
 
             <div className="mt-8 pt-6 border-t border-gray-100">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Preview Voice
+              <label className="block text-sm font-bold text-gray-700 mb-4">
+                Voice Preview Settings
               </label>
+              
+              <div className="flex flex-wrap gap-3 mb-4">
+                <button
+                  onClick={() => handlePreviewVoice("Hello, this is a test of the English voice model.")}
+                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
+                  className="px-4 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium rounded-xl hover:bg-blue-100 disabled:opacity-50 transition-colors flex items-center shadow-sm"
+                >
+                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
+                  Preview English
+                </button>
+                <button
+                  onClick={() => handlePreviewVoice("Xin chào, đây là giọng đọc thử nghiệm tiếng Việt.")}
+                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
+                  className="px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 text-sm font-medium rounded-xl hover:bg-green-100 disabled:opacity-50 transition-colors flex items-center shadow-sm"
+                >
+                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
+                  Preview Vietnamese
+                </button>
+              </div>
+
               <div className="flex space-x-2">
                 <input
                   type="text"
                   value={previewText}
                   onChange={(e) => setPreviewText(e.target.value)}
-                  placeholder="Text to preview..."
+                  placeholder="Custom text to preview..."
                   className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
                 />
                 <button
-                  onClick={handlePreviewVoice}
-                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
+                  onClick={() => handlePreviewVoice(previewText)}
+                  disabled={previewingVoice || !previewText || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
                   className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:bg-gray-300 transition-colors flex items-center"
                 >
                   {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  Preview
+                  Speak
                 </button>
               </div>
             </div>
