@@ -3,6 +3,8 @@
 ## Overview
 This runbook provides operational procedures for maintaining, configuring, deployment, and troubleshooting the CHUNKS EdTech platform.
 
+- **GitHub Repository:** [genshai-11/chunks-lesson-generator](https://github.com/genshai-11/chunks-lesson-generator)
+
 ## 1. Development Environment
 The application is built using React (Vite) and a Node.js (Express) backend.
 
