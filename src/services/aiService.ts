@@ -184,20 +184,44 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
 
 export async function fetchOpenRouterModels(apiKey: string, endpoint: string = 'https://openrouter.ai/api/v1') {
   if (!apiKey) return [];
+
+  const normalizedEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+
+  // Prefer direct provider call from browser (avoids static-host /api rewrite issues).
   try {
-    const apiBase = getApiBaseUrl();
-    const response = await fetch(`${apiBase}/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`, {
+    const response = await fetch(`${normalizedEndpoint}/models`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'CHUNKS App',
       },
     });
     if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
     const data = await response.json();
     return data.data || [];
-  } catch (error) {
-    console.error('Error fetching models:', error);
-    throw error;
+  } catch (directError) {
+    const apiBase = getApiBaseUrl();
+    if (!apiBase) {
+      console.error('Error fetching models (direct):', directError);
+      throw directError;
+    }
+
+    // Optional fallback via backend proxy if configured.
+    try {
+      const response = await fetch(`${apiBase}/api/ai/models?endpoint=${encodeURIComponent(normalizedEndpoint)}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      });
+      if (!response.ok) throw new Error(`Failed to fetch models via proxy: ${response.statusText}`);
+      const data = await response.json();
+      return data.data || [];
+    } catch (proxyError) {
+      console.error('Error fetching models (direct + proxy):', { directError, proxyError });
+      throw proxyError;
+    }
   }
 }
 
@@ -239,24 +263,42 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
       : new Error('Failed to get response from Gemini');
   }
 
-  const endpoint = settings?.endpoint;
+  const endpoint = settings?.endpoint || 'https://openrouter.ai/api/v1';
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
   let lastError: unknown = null;
 
   for (const model of modelsToTry) {
     try {
-      const apiBase = getApiBaseUrl();
-      const response = await fetch(`${apiBase}/api/ai/chat`, {
+      const normalizedEndpoint = endpoint?.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+
+      // Prefer direct provider call first.
+      let response = await fetch(`${normalizedEndpoint}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'CHUNKS App',
         },
         body: JSON.stringify({
-          endpoint,
           model: model,
           messages: [{ role: 'user', content: prompt }],
         }),
+      }).catch(async (directErr) => {
+        const apiBase = getApiBaseUrl();
+        if (!apiBase) throw directErr;
+        return fetch(`${apiBase}/api/ai/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            endpoint: normalizedEndpoint,
+            model: model,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
       });
 
       if (!response.ok) {
