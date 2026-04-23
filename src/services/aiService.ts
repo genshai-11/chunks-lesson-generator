@@ -195,35 +195,46 @@ export async function fetchOpenRouterModels(apiKey: string, endpoint: string = '
 }
 
 async function callAI(prompt: string, settings?: AISettings): Promise<string> {
-  const apiKey = settings?.apiKey;
+  const apiKey = settings?.apiKey?.trim();
   const primaryModel = settings?.primaryModel || 'gemini-2.0-flash';
   const fallbackModel = settings?.fallbackModel || 'gemini-1.5-flash';
 
-  // If no custom API key is provided, we use the default Gemini client with the configured model
-  if (!apiKey) {
-    try {
-      const gClient = getGeminiClient();
-      const response = await gClient.models.generateContent({
-        model: primaryModel,
-        contents: prompt,
-      });
-      if (response.text) return response.text;
-    } catch (error) {
-      console.warn(`Default model ${primaryModel} failed, trying fallback ${fallbackModel}:`, error);
-      const gClient = getGeminiClient();
-      const response = await gClient.models.generateContent({
-        model: fallbackModel,
-        contents: prompt,
-      });
-      if (!response.text) throw new Error("No response from Gemini fallback");
-      return response.text;
-    }
-    throw new Error("Failed to get response from Gemini");
+  // If user configured non-Gemini provider models but no provider key is present,
+  // fail fast with a clear message instead of silently switching back to Gemini.
+  const looksLikeProviderModel = (m?: string) => !!m && m.includes('/');
+  if (!apiKey && (looksLikeProviderModel(primaryModel) || looksLikeProviderModel(fallbackModel))) {
+    throw new Error(
+      'Custom provider models are configured but API Key is empty. Please save API Endpoint + API Key in Settings > AI & LLM.'
+    );
   }
 
-  const { endpoint } = settings;
+  // No provider API key: use Gemini-only path.
+  if (!apiKey) {
+    const geminiModels = [primaryModel, fallbackModel].filter(Boolean);
+    let geminiLastError: unknown = null;
+
+    for (const model of geminiModels) {
+      try {
+        const gClient = getGeminiClient();
+        const response = await gClient.models.generateContent({
+          model,
+          contents: prompt,
+        });
+        if (response.text) return response.text;
+      } catch (error) {
+        console.warn(`Gemini model ${model} failed:`, error);
+        geminiLastError = error;
+      }
+    }
+
+    throw geminiLastError instanceof Error
+      ? geminiLastError
+      : new Error('Failed to get response from Gemini');
+  }
+
+  const endpoint = settings?.endpoint;
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
-  let lastError = null;
+  let lastError: unknown = null;
 
   for (const model of modelsToTry) {
     try {
@@ -243,9 +254,8 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         let errorMessage = errorData.error?.message || errorData.error || errorData.message;
-        
+
         if (!errorMessage && errorData.rawResponse) {
-          // Extract text from HTML if it's a Cloudflare error page
           const raw = errorData.rawResponse;
           if (raw.includes('<html') && raw.includes('530')) {
             errorMessage = 'API Error 530: Cloudflare DNS/Origin error. The AI endpoint might be down or misconfigured.';
@@ -253,31 +263,26 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
             errorMessage = `API Error ${response.status}: ${raw.substring(0, 100)}...`;
           }
         }
-        
+
         errorMessage = errorMessage || `API Error: ${response.status}`;
         throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
       }
 
       const data = await response.json();
-      
-      // Handle OpenAI format
+
       if (data.choices && data.choices.length > 0 && data.choices[0].message) {
         return data.choices[0].message.content;
       }
-      // Handle Ollama native format
       if (data.response) {
         return data.response;
       }
-      // Handle Anthropic format
       if (data.content && Array.isArray(data.content)) {
         return data.content[0].text;
       }
-      // Handle raw text fallback from our proxy
       if (data.rawResponse) {
         return data.rawResponse;
       }
-      
-      // If we don't know the format, throw an error with the stringified data so the user can see it
+
       throw new Error(`Unexpected API response format: ${JSON.stringify(data).substring(0, 200)}...`);
     } catch (error) {
       console.warn(`Failed with model ${model}:`, error);
@@ -285,19 +290,10 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
     }
   }
 
-  console.warn('All configured models failed, attempting to fall back to default Gemini model.');
-  try {
-    const gClient = getGeminiClient();
-    const response = await gClient.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    if (response.text) return response.text;
-  } catch (geminiError) {
-    console.error('Fallback Gemini also failed:', geminiError);
-  }
-
-  throw lastError || new Error('All models failed');
+  // IMPORTANT: Do not silently fall back to Gemini when provider models are configured.
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('All configured provider models failed. Check endpoint, API key, and model IDs.');
 }
 
 function cleanJSON(text: string): string {
