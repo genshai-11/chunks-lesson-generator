@@ -1,6 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 
+function getApiBaseUrl(): string {
+  const raw = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
+  if (!raw || raw.trim() === '') return '';
+  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
+}
+
 // We lazily instantiate the Gemini client to avoid startup crashes if the key is completely missing
 function getGeminiClient(customKey?: string) {
   const key = customKey || process.env.GEMINI_API_KEY;
@@ -179,7 +185,8 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
 export async function fetchOpenRouterModels(apiKey: string, endpoint: string = 'https://openrouter.ai/api/v1') {
   if (!apiKey) return [];
   try {
-    const response = await fetch(`/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`, {
+    const apiBase = getApiBaseUrl();
+    const response = await fetch(`${apiBase}/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -238,7 +245,8 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
 
   for (const model of modelsToTry) {
     try {
-      const response = await fetch('/api/ai/chat', {
+      const apiBase = getApiBaseUrl();
+      const response = await fetch(`${apiBase}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
