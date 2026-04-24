@@ -7,6 +7,15 @@ function getApiBaseUrl(): string {
   return raw.endsWith('/') ? raw.slice(0, -1) : raw;
 }
 
+function normalizeEndpoint(rawEndpoint?: string): string {
+  let endpoint = (rawEndpoint || 'https://openrouter.ai/api/v1').trim();
+  if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+    endpoint = `https://${endpoint}`;
+  }
+  if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
+  return endpoint;
+}
+
 // We lazily instantiate the Gemini client to avoid startup crashes if the key is completely missing
 function getGeminiClient(customKey?: string) {
   const key = customKey || process.env.GEMINI_API_KEY;
@@ -185,7 +194,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
 export async function fetchOpenRouterModels(apiKey: string, endpoint: string = 'https://openrouter.ai/api/v1') {
   if (!apiKey) return [];
 
-  const normalizedEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+  const normalizedEndpoint = normalizeEndpoint(endpoint);
 
   // Prefer direct provider call from browser (avoids static-host /api rewrite issues).
   try {
@@ -269,7 +278,7 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
 
   for (const model of modelsToTry) {
     try {
-      const normalizedEndpoint = endpoint?.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+      const normalizedEndpoint = normalizeEndpoint(endpoint);
 
       // Prefer direct provider call first.
       let response = await fetch(`${normalizedEndpoint}/chat/completions`, {
@@ -286,7 +295,10 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
         }),
       }).catch(async (directErr) => {
         const apiBase = getApiBaseUrl();
-        if (!apiBase) throw directErr;
+        if (!apiBase) {
+          throw new Error(`Failed to reach AI endpoint ${normalizedEndpoint}. Check endpoint format (must include valid host), CORS policy, and network access.`);
+        }
+        
         return fetch(`${apiBase}/api/ai/chat`, {
           method: 'POST',
           headers: {
