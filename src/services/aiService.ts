@@ -38,7 +38,8 @@ export interface GenerateChunkParams {
 export interface GeneratedChunkResponse {
   engSentence: string;
   vieSentence: string;
-  category: string;
+  category?: string;
+  evaluation?: string;
 }
 
 export interface AutoGenerateParams {
@@ -387,60 +388,280 @@ function cleanJSON(text: string): string {
   return cleanText;
 }
 
-export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
-  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
-  const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
-  
-  const currentLen = sentenceLength || 'Medium';
-  const constraints = settings?.sentenceConstraints?.[currentLen];
-  
-  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
-  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+interface NormalizedResourceSpec {
+  rawText: string;
+  canonicalText: string;
+  color: ColorCategory;
+  ohm: number;
+  semanticRole: string;
+  allowSemanticUsage: boolean;
+}
 
-const prompt = `
-You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
-Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
 
-Target Theme/Topic: ${theme || 'General Conversation'}
+function normalizeResourceText(text: string): string {
+  return normalizeWhitespace(
+    text
+      .normalize('NFC')
+      .replace(/^[\s'"“”‘’`´.,!?;:()\[\]{}]+|[\s'"“”‘’`´.,!?;:()\[\]{}]+$/g, '')
+      .replace(/([!?.,])\1+/g, '$1')
+      .replace(/\s+/g, ' ')
+  );
+}
+
+function normalizeForComparison(text: string): string {
+  return normalizeWhitespace(
+    text
+      .normalize('NFC')
+      .toLowerCase()
+      .replace(/["“”‘’'`´]/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+  );
+}
+
+function countWords(text: string): number {
+  const matches = normalizeWhitespace(text).match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
+function countSentences(text: string): number {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return 0;
+  const matches = normalized.match(/[^.!?]+[.!?]+/g);
+  if (matches && matches.length > 0) return matches.length;
+  return 1;
+}
+
+function inferSemanticRole(color: ColorCategory): string {
+  switch (color) {
+    case 'Green':
+      return 'discourse marker, spoken reaction, filler, or transition';
+    case 'Blue':
+      return 'sentence frame, communication structure, or reusable speech pattern';
+    case 'Red':
+      return 'idiomatic, figurative, vivid, or emotionally charged expression';
+    case 'Pink':
+      return 'key concept, topic anchor, or lexical focus';
+    default:
+      return 'meaning-bearing language resource';
+  }
+}
+
+function buildNormalizedResourceSpecs(resources: Resource[]): NormalizedResourceSpec[] {
+  return resources.map((resource) => {
+    const canonicalText = normalizeResourceText(resource.name);
+    const hasExpressiveNoise = /([!?.,])\1+|([\p{L}])\2{2,}/iu.test(resource.name) || canonicalText !== normalizeWhitespace(resource.name);
+
+    return {
+      rawText: resource.name,
+      canonicalText,
+      color: resource.color,
+      ohm: resource.ohm,
+      semanticRole: inferSemanticRole(resource.color),
+      allowSemanticUsage: hasExpressiveNoise,
+    };
+  });
+}
+
+function parseGeneratedChunkResponse(responseText: string, fallbackCategory: string): GeneratedChunkResponse {
+  const cleanText = cleanJSON(responseText);
+  const parsed = JSON.parse(cleanText) as Partial<GeneratedChunkResponse>;
+
+  const vieSentence = typeof parsed.vieSentence === 'string' ? normalizeWhitespace(parsed.vieSentence) : '';
+  const engSentence = typeof parsed.engSentence === 'string' ? normalizeWhitespace(parsed.engSentence) : '';
+  const category = typeof parsed.category === 'string' && parsed.category.trim() !== ''
+    ? parsed.category.trim()
+    : fallbackCategory;
+  const evaluation = typeof parsed.evaluation === 'string' ? parsed.evaluation.trim() : undefined;
+
+  return {
+    vieSentence,
+    engSentence,
+    category,
+    evaluation,
+  };
+}
+
+function validateGeneratedChunk(
+  result: GeneratedChunkResponse,
+  resources: NormalizedResourceSpec[],
+  maxSentences: number,
+  maxWords: number,
+  currentLen: SentenceLength,
+): string[] {
+  const failures: string[] = [];
+
+  if (!result.vieSentence) failures.push('vieSentence is empty.');
+  if (!result.engSentence) failures.push('engSentence is empty.');
+  if (!result.vieSentence || !result.engSentence) return failures;
+
+  const vietWordCount = countWords(result.vieSentence);
+  const vietSentenceCount = countSentences(result.vieSentence);
+
+  if (vietWordCount > maxWords) {
+    failures.push(`Vietnamese word count is ${vietWordCount}, max allowed is ${maxWords}.`);
+  }
+
+  if (vietSentenceCount > maxSentences) {
+    failures.push(`Vietnamese sentence count is ${vietSentenceCount}, max allowed is ${maxSentences}.`);
+  }
+
+  if (currentLen === 'Very Short' && vietSentenceCount !== 1) {
+    failures.push('Very Short requires exactly 1 Vietnamese sentence.');
+  }
+
+  if (/(^|\n)\s*[-–—•]/m.test(result.vieSentence) || /(^|\n)\s*[-–—•]/m.test(result.engSentence)) {
+    failures.push('Dialogue or bullet-style formatting is not allowed.');
+  }
+
+  if (/(^|\s)[^:.!?\n]{1,20}:\s/.test(result.vieSentence)) {
+    failures.push('Speaker-tag dialogue formatting is not allowed in vieSentence.');
+  }
+
+  const normalizedVie = normalizeForComparison(result.vieSentence);
+  for (const resource of resources) {
+    const normalizedResource = normalizeForComparison(resource.canonicalText);
+    if (!normalizedResource) continue;
+
+    if (!resource.allowSemanticUsage) {
+      if (!normalizedVie.includes(normalizedResource)) {
+        failures.push(`Required resource "${resource.canonicalText}" is not clearly grounded in the Vietnamese sentence.`);
+      }
+      continue;
+    }
+
+    const fallbackTokens = normalizedResource
+      .split(' ')
+      .filter(token => token.length >= 3);
+
+    if (fallbackTokens.length === 0) continue;
+    const hasAnyToken = fallbackTokens.some(token => normalizedVie.includes(token));
+    if (!hasAnyToken) {
+      failures.push(`Expressive resource "${resource.rawText}" is not semantically traceable in the Vietnamese sentence.`);
+    }
+  }
+
+  return failures;
+}
+
+function buildGenerateChunkPrompt(params: {
+  resources: NormalizedResourceSpec[];
+  rTotal: number;
+  iValue: number;
+  uTotal: number;
+  theme: string;
+  currentLen: SentenceLength;
+  maxSentences: number;
+  maxWords: number;
+  previousFailures?: string[];
+}): string {
+  const { resources, rTotal, iValue, uTotal, theme, currentLen, maxSentences, maxWords, previousFailures } = params;
+  const resourcePack = resources.map((resource, index) => {
+    return `${index + 1}. raw="${resource.rawText}" | canonical="${resource.canonicalText}" | color=${resource.color} | ohm=${resource.ohm} | role=${resource.semanticRole} | exactSurfaceRequired=${resource.allowSemanticUsage ? 'no' : 'yes'}`;
+  }).join('\n');
+
+  const correctionBlock = previousFailures && previousFailures.length > 0
+    ? `\nPrevious attempt failed. Regenerate and fix ALL of these issues:\n- ${previousFailures.join('\n- ')}\n`
+    : '';
+
+  return `
+You are an expert Vietnamese linguist and curriculum designer for an EdTech system called "CHUNKS".
+
+Your job is to create ONE meaningful Vietnamese utterance spoken by ONE speaker, then create the faithful English follow-up translation.
+The Vietnamese sentence is the source of truth. The English sentence must follow the Vietnamese meaning and must not invent a new idea.
+
+Target Theme/Topic: ${theme}
 Desired Sentence Length: ${currentLen}
 
 Algorithm Context:
 - U = I * R
-- R (Resistance): Base difficulty of resources. Total R = ${rTotal}
-- I (Current/MSE): Context/complexity variable. I = ${iValue}
-- U (Voltage): Total lesson energy/difficulty. U = ${uTotal}
+- R (Resistance / base difficulty): ${rTotal}
+- I (Current / MSE multiplier): ${iValue}
+- U (Voltage / final difficulty): ${uTotal}
 
-Input Resources to include in the sentence:
-${resourceList}
+Required Resources:
+${resourcePack}
 
-Instructions:
-1. Primary Goal (Vietnamese First): Start by coming up with a highly natural, meaningful, and contextually logical Vietnamese sentence (or paragraph) that accurately incorporates the exact meaning of all the input resources. Do NOT just list them. Think deeply to create a coherent scenario.
-2. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
-3. Length Calibration: Strictly follow the length constraints for "${currentLen}": 
-   - You MUST generate MAXIMUM ${maxSentences} sentence(s).
-   - Total word count MUST be under ${maxWords} words.
-   - If "Very Short", ensure exactly 1 small sentence.
-4. Theme Adherence: The context MUST strictly revolve around the theme: ${theme || 'General'}.
-5. Energy Level: The structural complexity and vocabulary choice should reflect the U (Voltage) value: ${uTotal}. Higher U means more sophisticated grammar and nuanced meaning.
-6. Classification: Assign a relevant thematic category.
-7. Output Format: Return ONLY JSON. Ensure the final output is meaningful and accurately uses the input parameters.
+Core contract:
+1. Write Vietnamese FIRST.
+2. The Vietnamese output must be a single-speaker utterance, not a dialogue and not a two-person exchange.
+3. The Vietnamese output must express ONE clear communicative intent and ONE implied lived micro-situation.
+4. Use ALL required resources meaningfully. Do not stitch them together mechanically.
+5. If a resource has expressive noise or stretched punctuation, you may use a cleaned natural spoken form, but its meaning must remain traceable.
+6. The hard length limit applies ONLY to the Vietnamese output.
+7. Vietnamese sentence count must be <= ${maxSentences}.
+8. Vietnamese total word count must be < ${maxWords}.
+9. If Desired Sentence Length is Very Short, Vietnamese must be exactly 1 short sentence.
+10. The sentence should feel compatible with U=${uTotal}; higher U means richer nuance and denser expression, not random complexity.
+11. English must be a faithful natural translation of the Vietnamese meaning.
+12. category is optional metadata. If uncertain, use a simple useful category and move on.
 
-Output MUST be strictly in the following JSON format:
+Do NOT do any of the following:
+- do not create dialogue
+- do not create two speakers
+- do not output list-like stitched fragments
+- do not dump resources with no real idea
+- do not let the English sentence drift away from the Vietnamese meaning
+- do not exceed the Vietnamese word limit
+${correctionBlock}
+Return ONLY JSON in this exact schema:
 {
-  "engSentence": "...",
   "vieSentence": "...",
-  "category": "...",
-  "evaluation": "Explanation of how the resources create a meaningful context matching the U: ${uTotal}"
+  "engSentence": "...",
+  "category": "optional",
+  "evaluation": "Brief explanation of the one-speaker situation, the speaker intent, and how the resources support the meaning while matching U=${uTotal}."
 }
 `;
-  const responseText = await callAI(prompt, settings);
-  const cleanText = cleanJSON(responseText);
-  try {
-    return JSON.parse(cleanText) as GeneratedChunkResponse & { evaluation?: string };
-  } catch (e) {
-    console.error("Failed to parse AI response:", cleanText);
-    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}`);
+}
+
+export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
+  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
+  const currentLen = sentenceLength || 'Medium';
+  const constraints = settings?.sentenceConstraints?.[currentLen];
+  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
+  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+  const normalizedResources = buildNormalizedResourceSpecs(resources);
+  const fallbackCategory = normalizeWhitespace(theme || 'General Conversation') || 'General Conversation';
+
+  let lastError: Error | null = null;
+  let previousFailures: string[] = [];
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const prompt = buildGenerateChunkPrompt({
+      resources: normalizedResources,
+      rTotal,
+      iValue,
+      uTotal,
+      theme: fallbackCategory,
+      currentLen,
+      maxSentences,
+      maxWords,
+      previousFailures,
+    });
+
+    try {
+      const responseText = await callAI(prompt, settings);
+      const parsed = parseGeneratedChunkResponse(responseText, fallbackCategory);
+      const failures = validateGeneratedChunk(parsed, normalizedResources, maxSentences, maxWords, currentLen);
+
+      if (failures.length === 0) {
+        return parsed;
+      }
+
+      previousFailures = failures;
+      lastError = new Error(`Attempt ${attempt} failed validation: ${failures.join(' | ')}`);
+    } catch (error) {
+      lastError = error instanceof Error
+        ? error
+        : new Error(`Unknown generation error on attempt ${attempt}`);
+      previousFailures = [lastError.message];
+    }
   }
+
+  throw lastError || new Error('Failed to generate a valid chunk after 3 attempts.');
 }
 
 export async function generateAutoChunks(params: AutoGenerateParams): Promise<AutoGeneratedChunk[]> {
