@@ -489,6 +489,7 @@ function validateGeneratedChunk(
   result: GeneratedChunkResponse,
   resources: NormalizedResourceSpec[],
   maxSentences: number,
+  minWords: number,
   maxWords: number,
   currentLen: SentenceLength,
 ): string[] {
@@ -500,6 +501,10 @@ function validateGeneratedChunk(
 
   const vietWordCount = countWords(result.vieSentence);
   const vietSentenceCount = countSentences(result.vieSentence);
+
+  if (vietWordCount < minWords) {
+    failures.push(`Vietnamese word count is ${vietWordCount}, minimum expected is ${minWords}.`);
+  }
 
   if (vietWordCount > maxWords) {
     failures.push(`Vietnamese word count is ${vietWordCount}, max allowed is ${maxWords}.`);
@@ -555,10 +560,11 @@ function buildGenerateChunkPrompt(params: {
   theme: string;
   currentLen: SentenceLength;
   maxSentences: number;
+  minWords: number;
   maxWords: number;
   previousFailures?: string[];
 }): string {
-  const { resources, rTotal, iValue, uTotal, theme, currentLen, maxSentences, maxWords, previousFailures } = params;
+  const { resources, rTotal, iValue, uTotal, theme, currentLen, maxSentences, minWords, maxWords, previousFailures } = params;
   const resourcePack = resources.map((resource, index) => {
     return `${index + 1}. raw="${resource.rawText}" | canonical="${resource.canonicalText}" | color=${resource.color} | ohm=${resource.ohm} | role=${resource.semanticRole} | exactSurfaceRequired=${resource.allowSemanticUsage ? 'no' : 'yes'}`;
   }).join('\n');
@@ -593,11 +599,12 @@ Core contract:
 5. If a resource has expressive noise or stretched punctuation, you may use a cleaned natural spoken form, but its meaning must remain traceable.
 6. The hard length limit applies ONLY to the Vietnamese output.
 7. Vietnamese sentence count must be <= ${maxSentences}.
-8. Vietnamese total word count must be < ${maxWords}.
-9. If Desired Sentence Length is Very Short, Vietnamese must be exactly 1 short sentence.
-10. The sentence should feel compatible with U=${uTotal}; higher U means richer nuance and denser expression, not random complexity.
-11. English must be a faithful natural translation of the Vietnamese meaning.
-12. category is optional metadata. If uncertain, use a simple useful category and move on.
+8. Vietnamese total word count must stay in the band ${minWords}-${maxWords} words.
+9. Aim close to the upper end of that band; do not undershoot with a much shorter sentence.
+10. If Desired Sentence Length is Very Short, Vietnamese must be exactly 1 short sentence.
+11. The sentence should feel compatible with U=${uTotal}; higher U means richer nuance and denser expression, not random complexity.
+12. English must be a faithful natural translation of the Vietnamese meaning.
+13. category is optional metadata. If uncertain, use a simple useful category and move on.
 
 Do NOT do any of the following:
 - do not create dialogue
@@ -606,6 +613,7 @@ Do NOT do any of the following:
 - do not dump resources with no real idea
 - do not let the English sentence drift away from the Vietnamese meaning
 - do not exceed the Vietnamese word limit
+- do not undershoot the Vietnamese target band with an overly short sentence
 ${correctionBlock}
 Return ONLY JSON in this exact schema:
 {
@@ -625,6 +633,7 @@ export async function generateChunk(params: GenerateChunkParams): Promise<Genera
   const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
   const normalizedResources = buildNormalizedResourceSpecs(resources);
   const fallbackCategory = normalizeWhitespace(theme || 'General Conversation') || 'General Conversation';
+  const minWords = Math.max(1, maxWords - 5);
 
   let lastError: Error | null = null;
   let previousFailures: string[] = [];
@@ -638,6 +647,7 @@ export async function generateChunk(params: GenerateChunkParams): Promise<Genera
       theme: fallbackCategory,
       currentLen,
       maxSentences,
+      minWords,
       maxWords,
       previousFailures,
     });
@@ -645,7 +655,7 @@ export async function generateChunk(params: GenerateChunkParams): Promise<Genera
     try {
       const responseText = await callAI(prompt, settings);
       const parsed = parseGeneratedChunkResponse(responseText, fallbackCategory);
-      const failures = validateGeneratedChunk(parsed, normalizedResources, maxSentences, maxWords, currentLen);
+      const failures = validateGeneratedChunk(parsed, normalizedResources, maxSentences, minWords, maxWords, currentLen);
 
       if (failures.length === 0) {
         return parsed;
