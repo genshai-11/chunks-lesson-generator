@@ -131,14 +131,14 @@ async function startServer() {
     }
 
     const processOhm = async () => {
-      const ohms = settings?.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+      const ohms = settings?.ohmBaseValues || { Green: 3, Blue: 5, Red: 7, Pink: 9 };
       
       const defaultInstructions = `
-You are an expert linguistic analyzer. Analyze the following transcript and extract semantic chunks based on these 4 categories:
-- GREEN (${ohms.Green} Ohm): Gap fillers, discourse markers, transition phrases, openers (e.g., "Từ bây giờ", "Nói cách khác", "Thành thật mà nói").
-- BLUE (${ohms.Blue} Ohm): Sentence frames, reusable communication templates. These are typically INCOMPLETE sentence starters or grammatical structures waiting for a payload (e.g., "Cậu nên nhớ rằng...", "Nếu cậu mà biết nghĩ thì cậu đâu có...", "Tui không hiểu cậu lấy đâu ra... để..."). DO NOT classify complete, standalone factual sentences as BLUE.
-- RED (${ohms.Red} Ohm): Idiomatic expressions, figurative language, vivid colloquial sayings (e.g., "mọi thứ đều có cái giá của nó", "chuyện nhỏ").
-- PINK (${ohms.Pink} Ohm): Key terms, specific concepts, lexical topic units (e.g., "ví điện tử", "công nghệ").`;
+You are an expert linguistic analyzer. Your task is to extract semantic chunks from the transcript and categorize them into 4 energy levels (Ohm):
+- GREEN (${ohms.Green} Ohm) - Gap Fillers: Conversational "lubricants". Includes discourse markers, transition phrases, fillers, or openers that make speech natural but don't carry primary meaning (e.g., "actually", "in general", "so", "well").
+- BLUE (${ohms.Blue} Ohm) - Sentence Frames: Reusable communication templates or the "backbone" of a sentence. These are grammatical structures or sentence starters waiting for a payload (e.g., "I wanted to tell you that...", "If... then...", "Have you ever wondered..."). DO NOT classify complete, standalone factual sentences as BLUE; only incomplete frames.
+- RED (${ohms.Red} Ohm) - Idioms & Nuance: High-nuance expressions. Includes idioms, vivid colloquialisms, figurative language, or culturally specific sayings (e.g., "mật ngọt chết ruồi", "tới số rồi", "chuyện nhỏ").
+- PINK (${ohms.Pink} Ohm) - Key Terms & Concepts: Critical topic units or core concepts. Includes proper nouns, technical terms, or the primary subjects being discussed (e.g., "artificial intelligence", "e-wallet", "geography").`;
 
       const systemInstructions = settings?.ohmPromptInstructions && settings.ohmPromptInstructions.trim() !== '' 
          ? settings.ohmPromptInstructions 

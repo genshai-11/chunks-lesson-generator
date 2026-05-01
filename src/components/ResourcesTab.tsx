@@ -32,7 +32,7 @@ export default function ResourcesTab() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [baseOhms, setBaseOhms] = useState<Partial<Record<ColorCategory, number>>>({
-    Green: 5, Blue: 7, Pink: 3, Red: 9
+    Green: 3, Blue: 5, Red: 7, Pink: 9
   });
   const [showSettings, setShowSettings] = useState(false);
   const [savingOhms, setSavingOhms] = useState(false);

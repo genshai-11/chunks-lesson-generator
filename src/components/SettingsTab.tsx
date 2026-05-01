@@ -764,7 +764,15 @@ export default function SettingsTab() {
                   <button
                     type="button"
                     onClick={() => {
-                      const defaultPrompt = `Bạn là một chuyên gia phân tích ngôn ngữ học tiếng Việt. Hãy bóc tách Transcript thành các cụm từ (Semantic Chunks) mang năng lượng Ohm:\n- GREEN ({G} Ohm): Quán ngữ, từ nối, từ lặp, fillers.\n- BLUE ({B} Ohm): Khung câu, mẫu câu giao tiếp.\n- RED ({R} Ohm): Thành ngữ, từ láy, ngôn ngữ hình ảnh.\n- PINK ({P} Ohm): Từ khóa chuyên môn hoặc khái niệm chính.`;
+                      const defaultPrompt = `Bạn là một chuyên gia phân tích ngôn ngữ học. Nhiệm vụ của bạn là bóc tách Transcript thành các "Semantic Chunks" (Cụm nghĩa) và phân loại chúng vào 4 tầng năng lượng (Ohm) sau:
+
+1. GREEN (3 Ohm) - Gap Fillers: Những từ/cụm từ "bôi trơn" hội thoại. Bao gồm quán ngữ, từ nối, từ lặp, hoặc các từ đệm không mang nghĩa chính nhưng giúp câu nói tự nhiên (Ví dụ: "thực ra là", "nói chung là", "à thì", "vậy nên").
+
+2. BLUE (5 Ohm) - Sentence Frames: Khung câu hoặc mẫu câu giao tiếp nền tảng. Đây là phần "xương sống" của câu, chứa các cấu trúc ngữ pháp dùng để lắp ghép thông tin (Ví dụ: "Tôi định nói với cậu là...", "Nếu... thì...", "Cậu có bao giờ tự hỏi..."). Lưu ý: Chỉ chọn khung câu chưa hoàn chỉnh, không chọn câu trần thuật đã đầy đủ ý nghĩa.
+
+3. RED (7 Ohm) - Idioms & Nuance: Các cụm từ mang tính biểu cảm cao. Gồm thành ngữ, từ láy, ngôn ngữ hình ảnh, hoặc các cách diễn đạt dân dã, ẩn dụ đặc thù của người bản ngữ (Ví dụ: "chuyện nhỏ như con thỏ", "mật ngọt chết ruồi", "tới số rồi").
+
+4. PINK (9 Ohm) - Key Terms & Concepts: Các từ khóa quan trọng hoặc khái niệm cốt lõi. Gồm danh từ riêng, thuật ngữ chuyên môn, hoặc các đối tượng chính đang được nhắc đến trong đoạn hội thoại (Ví dụ: "trí tuệ nhân tạo", "ví điện tử", "địa lý").`;
                       if (!settings.ohmPromptInstructions || window.confirm('This will overwrite your custom prompt. Continue?')) {
                         setSettings(prev => ({ ...prev, ohmPromptInstructions: defaultPrompt }));
                       }
@@ -792,11 +800,11 @@ export default function SettingsTab() {
                       <label className={`block text-[10px] font-bold uppercase mb-1 ${color === 'Green' ? 'text-green-700' : color === 'Blue' ? 'text-blue-700' : color === 'Red' ? 'text-red-700' : 'text-pink-700'}`}>{color}</label>
                       <input
                         type="number"
-                        value={settings.ohmBaseValues?.[color as keyof typeof settings.ohmBaseValues] ?? (color === 'Green' ? 5 : color === 'Blue' ? 7 : color === 'Red' ? 9 : 3)}
+                        value={settings.ohmBaseValues?.[color as keyof typeof settings.ohmBaseValues] ?? (color === 'Green' ? 3 : color === 'Blue' ? 5 : color === 'Red' ? 7 : 9)}
                         onChange={(e) => setSettings({ 
                           ...settings, 
                           ohmBaseValues: { 
-                            ...(settings.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 }), 
+                            ...(settings.ohmBaseValues || { Green: 3, Blue: 5, Red: 7, Pink: 9 }), 
                             [color]: Number(e.target.value) 
                           } 
                         })}

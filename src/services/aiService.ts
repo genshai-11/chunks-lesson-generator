@@ -1,21 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 
-function getApiBaseUrl(): string {
-  const raw = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-  if (!raw || raw.trim() === '') return '';
-  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
-}
-
-function normalizeEndpoint(rawEndpoint?: string): string {
-  let endpoint = (rawEndpoint || 'https://openrouter.ai/api/v1').trim();
-  if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
-    endpoint = `https://${endpoint}`;
-  }
-  if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
-  return endpoint;
-}
-
 // We lazily instantiate the Gemini client to avoid startup crashes if the key is completely missing
 function getGeminiClient(customKey?: string) {
   const key = customKey || process.env.GEMINI_API_KEY;
@@ -38,8 +23,7 @@ export interface GenerateChunkParams {
 export interface GeneratedChunkResponse {
   engSentence: string;
   vieSentence: string;
-  category?: string;
-  evaluation?: string;
+  category: string;
 }
 
 export interface AutoGenerateParams {
@@ -108,20 +92,18 @@ export async function transcribeAudio(audioBlob: Blob, settings?: AISettings): P
 }
 
 export async function analyzeTranscript(transcript: string, settings?: AISettings, baseOhms?: Record<string, number>): Promise<OhmAnalysisResult> {
-  const ohms = settings?.ohmBaseValues || baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+  const ohms = settings?.ohmBaseValues || baseOhms || { Green: 3, Blue: 5, Red: 7, Pink: 9 };
   
   const defaultInstructions = `
-Bạn là một chuyên gia phân tích ngôn ngữ học tiếng Việt. Hãy bóc tách Transcript thành các cụm từ (Semantic Chunks) mang năng lượng Ohm:
-- GREEN (${ohms.Green} Ohm): Quán ngữ, từ nối, từ lặp, fillers. Ví dụ: "Thành thật mà nói", "Một ngày nào đó", "ờ thì".
-- BLUE (${ohms.Blue} Ohm): Khung câu, mẫu câu giao tiếp. Ví dụ: "Tôi tin rằng...", "Có thể nói là...", "Chúng ta nên...".
-- RED (${ohms.Red} Ohm): Thành ngữ, từ láy, ngôn ngữ hình ảnh. Ví dụ: "Nỗi sợ", "Vượt qua", "Mạnh mẽ lên".
-- PINK (${ohms.Pink} Ohm): Từ khóa chuyên môn hoặc khái niệm chính. Ví dụ: "Tâm lý học", "Kế toán".
+Bạn là một chuyên gia phân tích ngôn ngữ học. Nhiệm vụ của bạn là bóc tách Transcript thành các "Semantic Chunks" (Cụm nghĩa) và phân loại chúng vào 4 tầng năng lượng (Ohm) sau:
 
-QUY TẮC CỐT LÕI:
-1. KHÔNG ĐỂ KẾT QUẢ TRỐNG: Nếu câu có nghĩa, bạn PHẢI tìm ra ít nhất một cụm từ để phân loại. Đừng quá khắt khe.
-2. Ưu tiên bóc tách các cấu trúc giúp người nghe hiểu ý đồ người nói (BLUE) và các từ mang sắc thái (RED/GREEN).
-3. TRÁNH VỠ VỤN: Gộp các fillers đứng cạnh nhau thành 1 chunk.
-`;
+1. GREEN (${ohms.Green} Ohm) - Gap Fillers: Những từ/cụm từ "bôi trơn" hội thoại. Bao gồm quán ngữ, từ nối, từ lặp, hoặc các từ đệm không mang nghĩa chính nhưng giúp câu nói tự nhiên (Ví dụ: "thực ra là", "nói chung là", "à thì", "vậy nên").
+
+2. BLUE (${ohms.Blue} Ohm) - Sentence Frames: Khung câu hoặc mẫu câu giao tiếp nền tảng. Đây là phần "xương sống" của câu, chứa các cấu trúc ngữ pháp dùng để lắp ghép thông tin (Ví dụ: "Tôi định nói với cậu là...", "Nếu... thì...", "Cậu có bao giờ tự hỏi..."). Lưu ý: Chỉ chọn khung câu chưa hoàn chỉnh, không chọn câu trần thuật đã đầy đủ ý nghĩa.
+
+3. RED (${ohms.Red} Ohm) - Idioms & Nuance: Các cụm từ mang tính biểu cảm cao. Gồm thành ngữ, từ láy, ngôn ngữ hình ảnh, hoặc các cách diễn đạt dân dã, ẩn dụ đặc thù của người bản ngữ (Ví dụ: "chuyện nhỏ như con thỏ", "mật ngọt chết ruồi", "tới số rồi").
+
+4. PINK (${ohms.Pink} Ohm) - Key Terms & Concepts: Các từ khóa quan trọng hoặc khái niệm cốt lõi. Gồm danh từ riêng, thuật ngữ chuyên môn, hoặc các đối tượng chính đang được nhắc đến trong đoạn hội thoại (Ví dụ: "trí tuệ nhân tạo", "ví điện tử", "địa lý").`;
 
   const systemInstructions = settings?.ohmPromptInstructions && settings.ohmPromptInstructions.trim() !== '' 
      ? settings.ohmPromptInstructions 
@@ -194,131 +176,74 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
 
 export async function fetchOpenRouterModels(apiKey: string, endpoint: string = 'https://openrouter.ai/api/v1') {
   if (!apiKey) return [];
-
-  const normalizedEndpoint = normalizeEndpoint(endpoint);
-
-  // Prefer direct provider call from browser (avoids static-host /api rewrite issues).
   try {
-    const response = await fetch(`${normalizedEndpoint}/models`, {
+    const response = await fetch(`/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'CHUNKS App',
       },
     });
     if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
     const data = await response.json();
     return data.data || [];
-  } catch (directError) {
-    const apiBase = getApiBaseUrl();
-    if (!apiBase) {
-      console.error('Error fetching models (direct):', directError);
-      throw directError;
-    }
-
-    // Optional fallback via backend proxy if configured.
-    try {
-      const response = await fetch(`${apiBase}/api/ai/models?endpoint=${encodeURIComponent(normalizedEndpoint)}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
-      });
-      if (!response.ok) throw new Error(`Failed to fetch models via proxy: ${response.statusText}`);
-      const data = await response.json();
-      return data.data || [];
-    } catch (proxyError) {
-      console.error('Error fetching models (direct + proxy):', { directError, proxyError });
-      throw proxyError;
-    }
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    throw error;
   }
 }
 
 async function callAI(prompt: string, settings?: AISettings): Promise<string> {
-  const apiKey = settings?.apiKey?.trim();
+  const apiKey = settings?.apiKey;
   const primaryModel = settings?.primaryModel || 'gemini-2.0-flash';
   const fallbackModel = settings?.fallbackModel || 'gemini-1.5-flash';
 
-  // If user configured non-Gemini provider models but no provider key is present,
-  // fail fast with a clear message instead of silently switching back to Gemini.
-  const looksLikeProviderModel = (m?: string) => !!m && m.includes('/');
-  if (!apiKey && (looksLikeProviderModel(primaryModel) || looksLikeProviderModel(fallbackModel))) {
-    throw new Error(
-      'Custom provider models are configured but API Key is empty. Please save API Endpoint + API Key in Settings > AI & LLM.'
-    );
-  }
-
-  // No provider API key: use Gemini-only path.
+  // If no custom API key is provided, we use the default Gemini client with the configured model
   if (!apiKey) {
-    const geminiModels = [primaryModel, fallbackModel].filter(Boolean);
-    let geminiLastError: unknown = null;
-
-    for (const model of geminiModels) {
-      try {
-        const gClient = getGeminiClient();
-        const response = await gClient.models.generateContent({
-          model,
-          contents: prompt,
-        });
-        if (response.text) return response.text;
-      } catch (error) {
-        console.warn(`Gemini model ${model} failed:`, error);
-        geminiLastError = error;
-      }
+    try {
+      const gClient = getGeminiClient();
+      const response = await gClient.models.generateContent({
+        model: primaryModel,
+        contents: prompt,
+      });
+      if (response.text) return response.text;
+    } catch (error) {
+      console.warn(`Default model ${primaryModel} failed, trying fallback ${fallbackModel}:`, error);
+      const gClient = getGeminiClient();
+      const response = await gClient.models.generateContent({
+        model: fallbackModel,
+        contents: prompt,
+      });
+      if (!response.text) throw new Error("No response from Gemini fallback");
+      return response.text;
     }
-
-    throw geminiLastError instanceof Error
-      ? geminiLastError
-      : new Error('Failed to get response from Gemini');
+    throw new Error("Failed to get response from Gemini");
   }
 
-  const endpoint = settings?.endpoint || 'https://openrouter.ai/api/v1';
+  const { endpoint } = settings;
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
-  let lastError: unknown = null;
+  let lastError = null;
 
   for (const model of modelsToTry) {
     try {
-      const normalizedEndpoint = normalizeEndpoint(endpoint);
-
-      // Prefer direct provider call first.
-      let response = await fetch(`${normalizedEndpoint}/chat/completions`, {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'CHUNKS App',
         },
         body: JSON.stringify({
+          endpoint,
           model: model,
           messages: [{ role: 'user', content: prompt }],
         }),
-      }).catch(async (directErr) => {
-        const apiBase = getApiBaseUrl();
-        if (!apiBase) {
-          throw new Error(`Failed to reach AI endpoint ${normalizedEndpoint}. Check endpoint format (must include valid host), CORS policy, and network access.`);
-        }
-        
-        return fetch(`${apiBase}/api/ai/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            endpoint: normalizedEndpoint,
-            model: model,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         let errorMessage = errorData.error?.message || errorData.error || errorData.message;
-
+        
         if (!errorMessage && errorData.rawResponse) {
+          // Extract text from HTML if it's a Cloudflare error page
           const raw = errorData.rawResponse;
           if (raw.includes('<html') && raw.includes('530')) {
             errorMessage = 'API Error 530: Cloudflare DNS/Origin error. The AI endpoint might be down or misconfigured.';
@@ -326,26 +251,31 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
             errorMessage = `API Error ${response.status}: ${raw.substring(0, 100)}...`;
           }
         }
-
+        
         errorMessage = errorMessage || `API Error: ${response.status}`;
         throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
       }
 
       const data = await response.json();
-
+      
+      // Handle OpenAI format
       if (data.choices && data.choices.length > 0 && data.choices[0].message) {
         return data.choices[0].message.content;
       }
+      // Handle Ollama native format
       if (data.response) {
         return data.response;
       }
+      // Handle Anthropic format
       if (data.content && Array.isArray(data.content)) {
         return data.content[0].text;
       }
+      // Handle raw text fallback from our proxy
       if (data.rawResponse) {
         return data.rawResponse;
       }
-
+      
+      // If we don't know the format, throw an error with the stringified data so the user can see it
       throw new Error(`Unexpected API response format: ${JSON.stringify(data).substring(0, 200)}...`);
     } catch (error) {
       console.warn(`Failed with model ${model}:`, error);
@@ -353,10 +283,19 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
     }
   }
 
-  // IMPORTANT: Do not silently fall back to Gemini when provider models are configured.
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('All configured provider models failed. Check endpoint, API key, and model IDs.');
+  console.warn('All configured models failed, attempting to fall back to default Gemini model.');
+  try {
+    const gClient = getGeminiClient();
+    const response = await gClient.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+    if (response.text) return response.text;
+  } catch (geminiError) {
+    console.error('Fallback Gemini also failed:', geminiError);
+  }
+
+  throw lastError || new Error('All models failed');
 }
 
 function cleanJSON(text: string): string {
@@ -388,290 +327,61 @@ function cleanJSON(text: string): string {
   return cleanText;
 }
 
-interface NormalizedResourceSpec {
-  rawText: string;
-  canonicalText: string;
-  color: ColorCategory;
-  ohm: number;
-  semanticRole: string;
-  allowSemanticUsage: boolean;
-}
+export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
+  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
+  const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
+  
+  const currentLen = sentenceLength || 'Medium';
+  const constraints = settings?.sentenceConstraints?.[currentLen];
+  
+  const targetSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
+  const targetWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+  const minWords = Math.max(5, targetWords - 10);
 
-function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
+const prompt = `
+You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
+Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
 
-function normalizeResourceText(text: string): string {
-  return normalizeWhitespace(
-    text
-      .normalize('NFC')
-      .replace(/^[\s'"“”‘’`´.,!?;:()\[\]{}]+|[\s'"“”‘’`´.,!?;:()\[\]{}]+$/g, '')
-      .replace(/([!?.,])\1+/g, '$1')
-      .replace(/\s+/g, ' ')
-  );
-}
-
-function normalizeForComparison(text: string): string {
-  return normalizeWhitespace(
-    text
-      .normalize('NFC')
-      .toLowerCase()
-      .replace(/["“”‘’'`´]/g, ' ')
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-      .replace(/\s+/g, ' ')
-  );
-}
-
-function countWords(text: string): number {
-  const matches = normalizeWhitespace(text).match(/\S+/g);
-  return matches ? matches.length : 0;
-}
-
-function countSentences(text: string): number {
-  const normalized = normalizeWhitespace(text);
-  if (!normalized) return 0;
-  const matches = normalized.match(/[^.!?]+[.!?]+/g);
-  if (matches && matches.length > 0) return matches.length;
-  return 1;
-}
-
-function inferSemanticRole(color: ColorCategory): string {
-  switch (color) {
-    case 'Green':
-      return 'discourse marker, spoken reaction, filler, or transition';
-    case 'Blue':
-      return 'sentence frame, communication structure, or reusable speech pattern';
-    case 'Red':
-      return 'idiomatic, figurative, vivid, or emotionally charged expression';
-    case 'Pink':
-      return 'key concept, topic anchor, or lexical focus';
-    default:
-      return 'meaning-bearing language resource';
-  }
-}
-
-function buildNormalizedResourceSpecs(resources: Resource[]): NormalizedResourceSpec[] {
-  return resources.map((resource) => {
-    const canonicalText = normalizeResourceText(resource.name);
-    const hasExpressiveNoise = /([!?.,])\1+|([\p{L}])\2{2,}/iu.test(resource.name) || canonicalText !== normalizeWhitespace(resource.name);
-
-    return {
-      rawText: resource.name,
-      canonicalText,
-      color: resource.color,
-      ohm: resource.ohm,
-      semanticRole: inferSemanticRole(resource.color),
-      allowSemanticUsage: hasExpressiveNoise,
-    };
-  });
-}
-
-function parseGeneratedChunkResponse(responseText: string, fallbackCategory: string): GeneratedChunkResponse {
-  const cleanText = cleanJSON(responseText);
-  const parsed = JSON.parse(cleanText) as Partial<GeneratedChunkResponse>;
-
-  const vieSentence = typeof parsed.vieSentence === 'string' ? normalizeWhitespace(parsed.vieSentence) : '';
-  const engSentence = typeof parsed.engSentence === 'string' ? normalizeWhitespace(parsed.engSentence) : '';
-  const category = typeof parsed.category === 'string' && parsed.category.trim() !== ''
-    ? parsed.category.trim()
-    : fallbackCategory;
-  const evaluation = typeof parsed.evaluation === 'string' ? parsed.evaluation.trim() : undefined;
-
-  return {
-    vieSentence,
-    engSentence,
-    category,
-    evaluation,
-  };
-}
-
-function validateGeneratedChunk(
-  result: GeneratedChunkResponse,
-  resources: NormalizedResourceSpec[],
-  maxSentences: number,
-  minWords: number,
-  maxWords: number,
-  currentLen: SentenceLength,
-): string[] {
-  const failures: string[] = [];
-
-  if (!result.vieSentence) failures.push('vieSentence is empty.');
-  if (!result.engSentence) failures.push('engSentence is empty.');
-  if (!result.vieSentence || !result.engSentence) return failures;
-
-  const vietWordCount = countWords(result.vieSentence);
-  const vietSentenceCount = countSentences(result.vieSentence);
-
-  if (vietWordCount < minWords) {
-    failures.push(`Vietnamese word count is ${vietWordCount}, minimum expected is ${minWords}.`);
-  }
-
-  if (vietWordCount > maxWords) {
-    failures.push(`Vietnamese word count is ${vietWordCount}, max allowed is ${maxWords}.`);
-  }
-
-  if (vietSentenceCount > maxSentences) {
-    failures.push(`Vietnamese sentence count is ${vietSentenceCount}, max allowed is ${maxSentences}.`);
-  }
-
-  if (currentLen === 'Very Short' && vietSentenceCount !== 1) {
-    failures.push('Very Short requires exactly 1 Vietnamese sentence.');
-  }
-
-  if (/(^|\n)\s*[-–—•]/m.test(result.vieSentence) || /(^|\n)\s*[-–—•]/m.test(result.engSentence)) {
-    failures.push('Dialogue or bullet-style formatting is not allowed.');
-  }
-
-  if (/(^|\s)[^:.!?\n]{1,20}:\s/.test(result.vieSentence)) {
-    failures.push('Speaker-tag dialogue formatting is not allowed in vieSentence.');
-  }
-
-  const normalizedVie = normalizeForComparison(result.vieSentence);
-  for (const resource of resources) {
-    const normalizedResource = normalizeForComparison(resource.canonicalText);
-    if (!normalizedResource) continue;
-
-    if (!resource.allowSemanticUsage) {
-      if (!normalizedVie.includes(normalizedResource)) {
-        failures.push(`Required resource "${resource.canonicalText}" is not clearly grounded in the Vietnamese sentence.`);
-      }
-      continue;
-    }
-
-    const fallbackTokens = normalizedResource
-      .split(' ')
-      .filter(token => token.length >= 3);
-
-    if (fallbackTokens.length === 0) continue;
-    const hasAnyToken = fallbackTokens.some(token => normalizedVie.includes(token));
-    if (!hasAnyToken) {
-      failures.push(`Expressive resource "${resource.rawText}" is not semantically traceable in the Vietnamese sentence.`);
-    }
-  }
-
-  return failures;
-}
-
-function buildGenerateChunkPrompt(params: {
-  resources: NormalizedResourceSpec[];
-  rTotal: number;
-  iValue: number;
-  uTotal: number;
-  theme: string;
-  currentLen: SentenceLength;
-  maxSentences: number;
-  minWords: number;
-  maxWords: number;
-  previousFailures?: string[];
-}): string {
-  const { resources, rTotal, iValue, uTotal, theme, currentLen, maxSentences, minWords, maxWords, previousFailures } = params;
-  const resourcePack = resources.map((resource, index) => {
-    return `${index + 1}. raw="${resource.rawText}" | canonical="${resource.canonicalText}" | color=${resource.color} | ohm=${resource.ohm} | role=${resource.semanticRole} | exactSurfaceRequired=${resource.allowSemanticUsage ? 'no' : 'yes'}`;
-  }).join('\n');
-
-  const correctionBlock = previousFailures && previousFailures.length > 0
-    ? `\nPrevious attempt failed. Regenerate and fix ALL of these issues:\n- ${previousFailures.join('\n- ')}\n`
-    : '';
-
-  return `
-You are an expert Vietnamese linguist and curriculum designer for an EdTech system called "CHUNKS".
-
-Your job is to create ONE meaningful Vietnamese utterance spoken by ONE speaker, then create the faithful English follow-up translation.
-The Vietnamese sentence is the source of truth. The English sentence must follow the Vietnamese meaning and must not invent a new idea.
-
-Target Theme/Topic: ${theme}
+Target Theme/Topic: ${theme || 'General Conversation'}
 Desired Sentence Length: ${currentLen}
 
 Algorithm Context:
 - U = I * R
-- R (Resistance / base difficulty): ${rTotal}
-- I (Current / MSE multiplier): ${iValue}
-- U (Voltage / final difficulty): ${uTotal}
+- R (Resistance): Base difficulty of resources. Total R = ${rTotal}
+- I (Current/MSE): Context/complexity variable. I = ${iValue}
+- U (Voltage): Total lesson energy/difficulty. U = ${uTotal}
 
-Required Resources:
-${resourcePack}
+Input Resources to include in the sentence:
+${resourceList}
 
-Core contract:
-1. Write Vietnamese FIRST.
-2. The Vietnamese output must be a single-speaker utterance, not a dialogue and not a two-person exchange.
-3. The Vietnamese output must express ONE clear communicative intent and ONE implied lived micro-situation.
-4. Use ALL required resources meaningfully. Do not stitch them together mechanically.
-5. If a resource has expressive noise or stretched punctuation, you may use a cleaned natural spoken form, but its meaning must remain traceable.
-6. The hard length limit applies ONLY to the Vietnamese output.
-7. Vietnamese sentence count must be <= ${maxSentences}.
-8. Vietnamese total word count must stay in the band ${minWords}-${maxWords} words.
-9. Aim close to the upper end of that band; do not undershoot with a much shorter sentence.
-10. If Desired Sentence Length is Very Short, Vietnamese must be exactly 1 short sentence.
-11. The sentence should feel compatible with U=${uTotal}; higher U means richer nuance and denser expression, not random complexity.
-12. English must be a faithful natural translation of the Vietnamese meaning.
-13. category is optional metadata. If uncertain, use a simple useful category and move on.
+Instructions:
+1. ABSOLUTE PRIORITY (Meaning & Logic): The final result MUST be a highly natural, logical, and meaningful sentence/paragraph in real-life context. Do NOT force words together if they create a nonsensical "Frankenstein" sentence. It MUST sound like something a native speaker would actually say in real conversation.
+2. Vietnamese First: Start by constructing a logical Vietnamese scenario encompassing the exact meaning of all input resources. Do NOT just list them. Think deeply to create a coherent story or point.
+3. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
+4. Length Calibration: Strictly follow the length constraints for "${currentLen}"!
+   - You MUST generate EXACTLY ${targetSentences} sentence(s) (if "Very Short", exactly 1 small sentence).
+   - Total word count MUST be STRICTLY between ${minWords} and ${targetWords + 5} words. Do NOT generate less than ${minWords} words.
+5. Theme Adherence: The context MUST strictly revolve around the theme: ${theme || 'General'}.
+6. Energy Level: The structural complexity and vocabulary choice should reflect the U (Voltage) value: ${uTotal}. Higher U means more sophisticated grammar and nuanced meaning.
+7. Classification: Assign a relevant thematic category.
+8. Output Format: Return ONLY JSON. Ensure the final output is meaningful and accurately uses the input parameters.
 
-Do NOT do any of the following:
-- do not create dialogue
-- do not create two speakers
-- do not output list-like stitched fragments
-- do not dump resources with no real idea
-- do not let the English sentence drift away from the Vietnamese meaning
-- do not exceed the Vietnamese word limit
-- do not undershoot the Vietnamese target band with an overly short sentence
-${correctionBlock}
-Return ONLY JSON in this exact schema:
+Output MUST be strictly in the following JSON format:
 {
-  "vieSentence": "...",
   "engSentence": "...",
-  "category": "optional",
-  "evaluation": "Brief explanation of the one-speaker situation, the speaker intent, and how the resources support the meaning while matching U=${uTotal}."
+  "vieSentence": "...",
+  "category": "...",
+  "evaluation": "Explanation of how the resources create a meaningful context matching the U: ${uTotal}"
 }
 `;
-}
-
-export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
-  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
-  const currentLen = sentenceLength || 'Medium';
-  const constraints = settings?.sentenceConstraints?.[currentLen];
-  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
-  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
-  const normalizedResources = buildNormalizedResourceSpecs(resources);
-  const fallbackCategory = normalizeWhitespace(theme || 'General Conversation') || 'General Conversation';
-  const minWords = Math.max(1, maxWords - 5);
-
-  let lastError: Error | null = null;
-  let previousFailures: string[] = [];
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const prompt = buildGenerateChunkPrompt({
-      resources: normalizedResources,
-      rTotal,
-      iValue,
-      uTotal,
-      theme: fallbackCategory,
-      currentLen,
-      maxSentences,
-      minWords,
-      maxWords,
-      previousFailures,
-    });
-
-    try {
-      const responseText = await callAI(prompt, settings);
-      const parsed = parseGeneratedChunkResponse(responseText, fallbackCategory);
-      const failures = validateGeneratedChunk(parsed, normalizedResources, maxSentences, minWords, maxWords, currentLen);
-
-      if (failures.length === 0) {
-        return parsed;
-      }
-
-      previousFailures = failures;
-      lastError = new Error(`Attempt ${attempt} failed validation: ${failures.join(' | ')}`);
-    } catch (error) {
-      lastError = error instanceof Error
-        ? error
-        : new Error(`Unknown generation error on attempt ${attempt}`);
-      previousFailures = [lastError.message];
-    }
+  const responseText = await callAI(prompt, settings);
+  const cleanText = cleanJSON(responseText);
+  try {
+    return JSON.parse(cleanText) as GeneratedChunkResponse & { evaluation?: string };
+  } catch (e) {
+    console.error("Failed to parse AI response:", cleanText);
+    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
-
-  throw lastError || new Error('Failed to generate a valid chunk after 3 attempts.');
 }
 
 export async function generateAutoChunks(params: AutoGenerateParams): Promise<AutoGeneratedChunk[]> {
@@ -679,8 +389,9 @@ export async function generateAutoChunks(params: AutoGenerateParams): Promise<Au
 
   const currentLen = sentenceLength || 'Medium';
   const constraints = settings?.sentenceConstraints?.[currentLen];
-  const maxSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
-  const maxWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+  const targetSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
+  const targetWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
+  const minWords = Math.max(5, targetWords - 10);
 
   // Pre-filter resources to balance them based on color preferences and target U
   const filteredAvailable = availableResources
@@ -707,9 +418,8 @@ Your mission is to construct ${quantity} high-quality learning chunks.
 Theme: ${theme}
 Target Voltage (U): ${targetU}
 Sentence Length Constraints ("${currentLen}"):
-- MAXIMUM ${maxSentences} sentence(s)
-- Total word count MUST be under ${maxWords} words.
-- If "Very Short", ensure exactly 1 short sentence.
+- STRICTLY EXACTLY ${targetSentences} sentence(s) (if "Very Short", exactly 1 short sentence).
+- Total word count MUST be STRICTLY between ${minWords} and ${targetWords + 5} words. Do NOT generate less than ${minWords} words.
 Color Preferences: ${colorPreferences.join(', ')}
 
 Available Ingredients (Resources):
@@ -721,10 +431,11 @@ ${physicsLogic}
 
 Construction Flow:
 1. Resource Selection: Pick 2-4 resources that mathematically approach the Target U.
-2. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the resources.
-3. English Translation: Translate that Vietnamese concept into natural English.
-4. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length roughly around ${maxSentences} sentences and under ${maxWords} words? If not, REGENERATE.
-5. Final Validation: Ensure all resources used are from the provided list.
+2. ABSOLUTE PRIORITY (Meaning & Logic): The generated sentence MUST be highly natural, logical, and meaningful in everyday conversation. Do NOT forcibly combine incompatible phrases just to meet constraints. If the combination sounds awkward, change the context or pick different resources. It must sound like native speech.
+3. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the selected resources.
+4. English Translation: Translate that Vietnamese concept into natural English.
+5. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length exactly ${targetSentences} sentences and between ${minWords}-${targetWords + 5} words? If not, REGENERATE before outputting.
+6. Final Validation: Ensure all resources used are from the provided list.
 
 Output strictly as JSON array:
 [

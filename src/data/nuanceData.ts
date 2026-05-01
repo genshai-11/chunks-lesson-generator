@@ -1,13 +1,5 @@
 export const rawNuanceData = `BOOK OF NUANCE WORDS,,,,
-No.,"GREEN (Gap fillers)
-...,
-3 Ohm","BLUE (Sentence)
-...
-5 Ohm","RED (Idioms)
-"" ""
-7 Ohm","PINK (Key terms)
-' '
-1 Ohm"
+No.,"GREEN (Gap Fillers)\nTừ bôi trơn hôi thoại\n3 Ohm","BLUE (Sentence Frames)\nKhung câu nền tảng\n5 Ohm","RED (Idioms & Nuance)\nThành ngữ & Sắc thái\n7 Ohm","PINK (Key Terms)\nTừ khóa chính\n9 Ohm"
 1,"Từ bây giờ,... / Từ giờ trở đi,...",Cậu nên nhớ rằng...,"""Mật ngọt chết ruồi""","""Dép lào"""
 2,"Tui không phiền kể cậu cái này,...",Nếu cậu mà biết nghĩ thì cậu đâu có...,"""Có ai ở nhà không?""","""Tham lam"""
 3,"Cả ngày hôm qua,...",Tui thực sự không có đủ thời gian để...,Thời gian trôi nhanh thật!,Qúa rõ ràng'

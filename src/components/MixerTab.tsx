@@ -80,7 +80,7 @@ export default function MixerTab() {
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Medium');
-  const [isColorFocusOn, setIsColorFocusOn] = useState<boolean>(true);
+  const [isColorFocusOn, setIsColorFocusOn] = useState<boolean>(false);
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
   const [savedIndices, setSavedIndices] = useState<Set<number>>(new Set());
@@ -210,7 +210,7 @@ export default function MixerTab() {
   };
 
   const handlePrepareBlueprint = () => {
-    if (!aiTheme || resources.length === 0) return;
+    if (resources.length === 0) return;
     
     // Group by color (all resources)
     const allResourcesByColor: Record<string, Resource[]> = {};
@@ -501,7 +501,7 @@ export default function MixerTab() {
               <div className="flex space-x-2">
                 <button
                   onClick={handlePrepareBlueprint}
-                  disabled={loading || !aiTheme}
+                  disabled={loading || resources.length === 0}
                   className="px-6 py-2 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-800 transition-all disabled:opacity-30 flex items-center"
                 >
                   <Cpu className="w-4 h-4 mr-2" /> 1. Calculate Blueprints
@@ -521,12 +521,12 @@ export default function MixerTab() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Theme</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Theme <span className="text-gray-400 font-normal">(Optional)</span></label>
                   <input
                     type="text"
                     value={aiTheme}
                     onChange={(e) => setAiTheme(e.target.value)}
-                    placeholder="e.g., Business meeting, Travel, Daily life"
+                    placeholder="e.g., Business meeting, Travel (Optional)"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
                   />
                 </div>
@@ -556,7 +556,7 @@ export default function MixerTab() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Total Ohm (U)</label>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Ohm (R)</label>
                         <input
                           type="number"
                           value={aiTargetOhm}
@@ -627,17 +627,17 @@ export default function MixerTab() {
                     </div>
                   </div>
                 )}
-                <div>
+                 <div>
                   <label className="flex items-center text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
                     Sentence Length
                     <div className="group relative ml-2">
                        <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal">
                          <div className="space-y-2">
-                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span><br/>Exactly 1 small sentence. Max 15 words. High precision.</div>
-                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span><br/>1-2 clauses, direct and concise. Focuses purely on embedding the keywords.</div>
-                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span><br/>Standard conversational sentence, balanced context and detail.</div>
-                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span><br/>Complex structures, multiple clauses, storytelling, rich context.</div>
+                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span><br/>Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxSentences ?? 1} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxWords ?? 15} words</div>
+                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span><br/>Max {aiSettings?.sentenceConstraints?.['Short']?.maxSentences ?? 2} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Short']?.maxWords ?? 30} words</div>
+                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span><br/>Max {aiSettings?.sentenceConstraints?.['Medium']?.maxSentences ?? 3} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Medium']?.maxWords ?? 60} words</div>
+                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span><br/>Max {aiSettings?.sentenceConstraints?.['Long']?.maxSentences ?? 5} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Long']?.maxWords ?? 100} words</div>
                          </div>
                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                        </div>
@@ -722,7 +722,7 @@ export default function MixerTab() {
 
             <button
               onClick={handlePrepareBlueprint}
-              disabled={!aiTheme || resources.length === 0}
+              disabled={resources.length === 0}
               className="mt-8 w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all"
             >
               <Settings2 className="-ml-1 mr-2 h-5 w-5" /> 1. Prepare Blueprint

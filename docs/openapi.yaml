@@ -1,0 +1,187 @@
+openapi: 3.0.3
+info:
+  title: CHUNKS Core API - S2S Integration
+  description: |
+    Professional Grade API for Linguistic Analysis, TTS, and STT services.
+    Designed for Server-to-Server (S2S) communication with high reliability and tracing.
+  version: 1.0.0
+  contact:
+    name: CHUNKS Dev Team
+    email: support@chunks-app.ai
+
+servers:
+  - url: https://api.chunks-app.ai/v1
+    description: Production Server
+  - url: https://staging-api.chunks-app.ai/v1
+    description: Staging Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Standard JWT Bearer token. Get your token from the developer dashboard."
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "Fallback API Key for simple M2M scripts."
+
+  headers:
+    CorrelationId:
+      description: "A unique identifier for tracing the request across systems."
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      description: "Ensure that identical requests are only processed once."
+      schema:
+        type: string
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "UNAUTHORIZED"
+        message:
+          type: string
+          example: "Invalid or expired token."
+        trace_id:
+          type: string
+          example: "req-123-456-789"
+
+    OhmAnalysisResult:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "success"
+        data:
+          type: object
+          properties:
+            totalOhm:
+              type: number
+            formula:
+              type: string
+            chunks:
+              type: array
+              items:
+                $ref: '#/components/schemas/Chunk'
+
+    Chunk:
+      type: object
+      properties:
+        text:
+          type: string
+        label:
+          type: string
+          enum: [GREEN, BLUE, RED, PINK]
+        ohm:
+          type: number
+        confidence:
+          type: number
+
+paths:
+  /health:
+    get:
+      summary: System Health Check
+      description: Verify if the API gateway and core services are active.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              example:
+                status: "ok"
+                timestamp: "2026-04-24T03:30:00Z"
+
+  /analysis/linguistic:
+    post:
+      summary: Perform Linguistic Ohm Analysis
+      description: |
+        Analyze a raw transcript to extract semantic chunks and calculate the "Ohm" energy level.
+        Requires X-Idempotency-Key for reliable processing.
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+          required: true
+        - in: header
+          name: X-Idempotency-Key
+          schema:
+            type: string
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transcript]
+              properties:
+                transcript:
+                  type: string
+                  description: "Full text content to be analyzed."
+                  example: "I wanted to tell you that honey catches more flies than vinegar."
+                webhookUrl:
+                  type: string
+                  format: uri
+                  description: "Optional URL to receive the result asynchronously."
+      responses:
+        '200':
+          description: Analysis Successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OhmAnalysisResult'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /audio/speech:
+    post:
+      summary: Convert Text to Speech
+      description: Generate high-quality voice-over from text via ElevenLabs integration.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: X-Correlation-ID
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  example: "Welcome to CHUNKS language learning."
+                voiceId:
+                  type: string
+                  description: "UUID of the ElevenLabs voice."
+      responses:
+        '200':
+          description: Audio content returned in base64
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audioContent:
+                    type: string
+                    format: base64
