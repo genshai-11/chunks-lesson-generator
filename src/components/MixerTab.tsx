@@ -39,6 +39,8 @@ interface DraftChunk {
   resourcesUsed: Resource[];
   rTotal: number;
   iValue: number;
+  tl?: number;
+  lc?: number;
   uTotal: number;
   status: 'draft' | 'loading' | 'success' | 'error';
   result?: {
@@ -60,6 +62,15 @@ const COLOR_STYLES: Record<string, { text: string, bg: string, border: string, t
   Purple: { text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', tagBg: 'bg-purple-50', tagText: 'text-purple-700', tagBorder: 'border-purple-100' },
 };
 
+const TOPIC_PRESETS = [
+  { label: 'Daily Life & Casual (TL: 1.0)', value: 'Daily Life', tl: 1.0 },
+  { label: 'Travel & Lifestyle (TL: 1.2)', value: 'Travel', tl: 1.2 },
+  { label: 'Workplace & Career (TL: 1.4)', value: 'Workplace', tl: 1.4 },
+  { label: 'Technology & Science (TL: 1.6)', value: 'Technology', tl: 1.6 },
+  { label: 'Business & Economics (TL: 1.8)', value: 'Business & Economics', tl: 1.8 },
+  { label: 'Philosophy & Academic (TL: 2.0)', value: 'Academic', tl: 2.0 },
+];
+
 export default function MixerTab() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [aiSettings, setAiSettings] = useState<AISettings | undefined>();
@@ -73,13 +84,16 @@ export default function MixerTab() {
   };
   
   // AI Mode State
-  const [aiTheme, setAiTheme] = useState('');
+  const [topicMode, setTopicMode] = useState<'preset' | 'manual'>('preset');
+  const [aiTheme, setAiTheme] = useState('Daily Life');
   const [blueprintMode, setBlueprintMode] = useState<'targetOhm' | 'recipe'>('targetOhm');
-  const [aiTargetOhm, setAiTargetOhm] = useState<number>(30);
+  const [aiTargetCVR, setAiTargetCVR] = useState<number>(30);
   const [aiQuantity, setAiQuantity] = useState<number>(3);
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
   const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Medium');
+  const [aiTopicLevel, setAiTopicLevel] = useState<number>(1.0);
+  const [aiTopic, setAiTopic] = useState<string>('');
   const [isColorFocusOn, setIsColorFocusOn] = useState<boolean>(false);
   const [aiColors, setAiColors] = useState<ColorCategory[]>(['Green', 'Blue', 'Red', 'Pink']);
   const [draftChunks, setDraftChunks] = useState<DraftChunk[]>([]);
@@ -145,7 +159,10 @@ export default function MixerTab() {
         rTotal: chunk.rTotal || 0,
         iValue: chunk.iValue || 1,
         uTotal: chunk.uTotal || 0,
-        settings: aiSettings
+        settings: aiSettings,
+        theme: topicMode === 'preset' ? aiTheme : '',
+        topicLevel: chunk.tl || aiTopicLevel,
+        sentenceLength: aiSentenceLength
       });
 
       setDraftChunks(prev => {
@@ -227,9 +244,11 @@ export default function MixerTab() {
     
     for (let i = 0; i < aiQuantity; i++) {
       let currentCombo: Resource[] = [];
-      let currentOhm = 0; // This is the Base R
+      let currentTC = 0; // This is the TC (Base R)
       
-      const finalI = Math.max(0.1, Math.round(baseMultiplier * 10) / 10);
+      const lc = Math.max(0.1, Math.round(baseMultiplier * 10) / 10);
+      const tl = aiTopicLevel;
+      const finalI = lc * tl; // The total multiplier
 
       if (blueprintMode === 'recipe') {
         // Recipe Mode: Pick exactly the number of items specified for each color
@@ -244,10 +263,10 @@ export default function MixerTab() {
             }
           }
         });
-        currentOhm = calculateOhm(currentCombo);
+        currentTC = calculateOhm(currentCombo);
       } else {
-        // Target Ohm Mode: Find Base R by dividing Target Total Ohm by Multiplier
-        const targetR = aiTargetOhm / finalI;
+        // Target CVR Mode: Find Base TC by dividing Target Total CVR by Multiplier
+        const targetTC = aiTargetCVR / finalI;
 
         // Filter by color preferences if ON, otherwise use all available resources
         const filteredResources = resources.filter(r => (!isColorFocusOn || aiColors.length === 0 || aiColors.includes(r.color)));
@@ -264,7 +283,7 @@ export default function MixerTab() {
         const availableColors = Object.keys(resourcesByColor);
 
         let bestCombo: Resource[] = [];
-        let bestBaseR = 0;
+        let bestBaseTC = 0;
         let attempts = 0;
         const maxAttempts = 500; 
         
@@ -284,31 +303,33 @@ export default function MixerTab() {
             testCombo.push(...shuffledItems);
           });
 
-          const testBaseR = calculateOhm(testCombo);
+          const testBaseTC = calculateOhm(testCombo);
           
-          if (attempts === 0 || Math.abs(testBaseR - targetR) < Math.abs(bestBaseR - targetR)) {
+          if (attempts === 0 || Math.abs(testBaseTC - targetTC) < Math.abs(bestBaseTC - targetTC)) {
             bestCombo = testCombo;
-            bestBaseR = testBaseR;
+            bestBaseTC = testBaseTC;
           }
           
-          // Targeted accuracy: ensure the FINAL ohm is within +/- 3 of requested Target
-          const testFinalU = testBaseR * finalI;
-          if (Math.abs(testFinalU - aiTargetOhm) <= 3) break; 
+          // Targeted accuracy: ensure the FINAL CVR is within +/- 3 of requested Target
+          const testFinalCVR = testBaseTC * finalI;
+          if (Math.abs(testFinalCVR - aiTargetCVR) <= 3) break; 
           attempts++;
         }
         currentCombo = bestCombo;
-        currentOhm = bestBaseR;
+        currentTC = bestBaseTC;
       }
 
       if (currentCombo.length > 0) {
-        const finalU = Math.round((currentOhm * finalI) * 10) / 10;
+        const finalCVR = Math.round((currentTC * finalI) * 10) / 10;
 
         newDrafts.push({
           id: `draft-${Date.now()}-${i}`,
           resourcesUsed: currentCombo,
-          rTotal: currentOhm,
+          rTotal: currentTC,
           iValue: finalI,
-          uTotal: finalU,
+          tl,
+          lc,
+          uTotal: finalCVR,
           status: 'draft'
         });
       }
@@ -338,7 +359,8 @@ export default function MixerTab() {
         rTotal: draft.rTotal,
         iValue: draft.iValue,
         uTotal: draft.uTotal,
-        theme: aiTheme,
+        theme: topicMode === 'preset' ? aiTheme : '',
+        topicLevel: draft.tl || aiTopicLevel,
         sentenceLength: aiSentenceLength,
         settings: aiSettings
       });
@@ -520,15 +542,76 @@ export default function MixerTab() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Topic / Theme <span className="text-gray-400 font-normal">(Optional)</span></label>
-                  <input
-                    type="text"
-                    value={aiTheme}
-                    onChange={(e) => setAiTheme(e.target.value)}
-                    placeholder="e.g., Business meeting, Travel (Optional)"
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
-                  />
+                <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-bold text-gray-800">Topic Configuration</label>
+                    <div className="flex items-center bg-gray-200 rounded-md p-1">
+                      <button
+                        onClick={() => setTopicMode('preset')}
+                        className={`px-3 py-1 text-xs font-bold rounded shadow-sm ${topicMode === 'preset' ? 'bg-white text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Auto-Classified
+                      </button>
+                      <button
+                        onClick={() => setTopicMode('manual')}
+                        className={`px-3 py-1 text-xs font-bold rounded shadow-sm ${topicMode === 'manual' ? 'bg-white text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Manual TL
+                      </button>
+                    </div>
+                  </div>
+
+                  {topicMode === 'preset' ? (
+                    <div className="flex gap-4 items-end">
+                      <div className="flex-1">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Preset Topic</label>
+                        <select
+                          value={aiTheme}
+                          onChange={(e) => {
+                            const selected = e.target.value;
+                            setAiTheme(selected);
+                            const presetInfo = TOPIC_PRESETS.find(p => p.value === selected);
+                            if (presetInfo) {
+                              setAiTopicLevel(presetInfo.tl);
+                            }
+                          }}
+                          className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2.5 text-sm font-medium bg-white"
+                        >
+                          {TOPIC_PRESETS.map((preset) => (
+                            <option key={preset.value} value={preset.value}>{preset.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="w-24 bg-gray-100 p-2.5 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">TL</span>
+                        <span className="text-sm font-black text-red-600 leading-none">{aiTopicLevel.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 items-end bg-white p-3 rounded-lg border border-gray-200">
+                      <div className="flex-1">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-0" title="Topic Level">
+                            Manual Topic Level: <span className="text-red-600 font-black">{aiTopicLevel.toFixed(1)}</span>
+                          </label>
+                        </div>
+                        <input 
+                          type="range"
+                          min="1" max="2" step="0.1"
+                          value={aiTopicLevel}
+                          onChange={(e) => {
+                            setAiTopicLevel(parseFloat(e.target.value));
+                            setAiTheme(''); // Clear theme when manually dragging
+                          }}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                        />
+                        <div className="flex justify-between text-[10px] text-gray-400 mt-1 font-medium">
+                          <span>1.0 (Casual)</span>
+                          <span>2.0 (Advanced)</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Blueprint Mode</label>
@@ -539,7 +622,7 @@ export default function MixerTab() {
                         blueprintMode === 'targetOhm' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      Target Ohm
+                      Target CVR
                     </button>
                     <button
                       onClick={() => setBlueprintMode('recipe')}
@@ -556,11 +639,11 @@ export default function MixerTab() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target Ohm (R)</label>
+                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target CVR</label>
                         <input
                           type="number"
-                          value={aiTargetOhm}
-                          onChange={(e) => setAiTargetOhm(Number(e.target.value))}
+                          value={aiTargetCVR}
+                          onChange={(e) => setAiTargetCVR(Number(e.target.value))}
                           className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm font-bold"
                           min="5"
                         />
@@ -634,32 +717,61 @@ export default function MixerTab() {
                        <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal">
                          <div className="space-y-2">
-                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span><br/>Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxSentences ?? 1} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxWords ?? 15} words</div>
-                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span><br/>Max {aiSettings?.sentenceConstraints?.['Short']?.maxSentences ?? 2} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Short']?.maxWords ?? 30} words</div>
-                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span><br/>Max {aiSettings?.sentenceConstraints?.['Medium']?.maxSentences ?? 3} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Medium']?.maxWords ?? 60} words</div>
-                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span><br/>Max {aiSettings?.sentenceConstraints?.['Long']?.maxSentences ?? 5} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Long']?.maxWords ?? 100} words</div>
+                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span> <span className="text-[9px] text-gray-400">- Single sentence</span><br/>Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxSentences ?? 1} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxWords ?? 15} words</div>
+                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span> <span className="text-[9px] text-gray-400">- Two sentences</span><br/>Max {aiSettings?.sentenceConstraints?.['Short']?.maxSentences ?? 2} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Short']?.maxWords ?? 30} words</div>
+                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span> <span className="text-[9px] text-gray-400">- Paragraph</span><br/>Max {aiSettings?.sentenceConstraints?.['Medium']?.maxSentences ?? 3} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Medium']?.maxWords ?? 60} words</div>
+                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span> <span className="text-[9px] text-gray-400">- Short Essay</span><br/>Max {aiSettings?.sentenceConstraints?.['Long']?.maxSentences ?? 5} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Long']?.maxWords ?? 100} words</div>
                          </div>
                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                        </div>
                     </div>
                   </label>
                   <div className="flex bg-gray-100/50 p-1 rounded-xl mb-4">
-                    {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
-                      <button
-                        key={len}
-                        onClick={() => setAiSentenceLength(len)}
-                        className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all text-center leading-tight ${
-                          aiSentenceLength === len ? 'bg-white text-red-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'
-                        }`}
-                      >
-                        {len}
-                      </button>
-                    ))}
+                    {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => {
+                      let minItems = 1;
+                      let maxItems = 1; // Very Short: 1 item
+                      let minTargetOhm = 3;
+                      let maxTargetOhm = 9;
+                      
+                      if (len === 'Short') { minItems = 2; maxItems = 2; minTargetOhm = 12; maxTargetOhm = 24;} // Short: 2 items
+                      else if (len === 'Medium') { minItems = 2; maxItems = 3; minTargetOhm = 16; maxTargetOhm = 45;} // Medium: 2-3 items
+                      else if (len === 'Long') { minItems = 4; maxItems = 4; minTargetOhm = 35; maxTargetOhm = 90;} // Long: 4 items
+                      
+                      const suggestedText = `${minTargetOhm}-${maxTargetOhm}`;
+                      
+                      let isRecommended = true;
+                      if (blueprintMode === 'targetOhm') {
+                        isRecommended = aiTargetCVR >= (minTargetOhm * 0.7) && aiTargetCVR <= (maxTargetOhm * 1.3);
+                      } else if (blueprintMode === 'recipe') {
+                        const totalRecipeItems = Object.values(aiRecipe).reduce((sum, count) => sum + count, 0);
+                        if (totalRecipeItems > 0) {
+                          isRecommended = totalRecipeItems >= minItems && totalRecipeItems <= maxItems;
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={len}
+                          onClick={() => setAiSentenceLength(len)}
+                          className={`flex-1 flex text-xs items-center justify-center flex-col py-2 font-black uppercase tracking-widest rounded-lg transition-all text-center leading-tight ${
+                            aiSentenceLength === len 
+                              ? 'bg-white text-red-600 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'
+                          } ${(!isRecommended && aiSentenceLength !== len) ? 'opacity-50 grayscale hover:opacity-100 hover:grayscale-0' : 'opacity-100'}`}
+                          title={isRecommended ? "Recommended for current settings" : "Not optimal for current CVR/Recipe"}
+                        >
+                          <span className="mb-0.5">{len}</span>
+                          <span className={`text-[11px] normal-case tracking-normal ${isRecommended ? (aiSentenceLength === len ? 'text-gray-500 font-bold' : 'text-gray-400 font-semibold') : 'text-red-500 font-bold'} block mt-0.5`}>
+                            CVR: {suggestedText}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* Multiplier Info */}
                   <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-100 flex justify-between items-center">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Complexity Adjuster</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none" title="Length Complexity">LC (Length Complexity)</label>
                     <span className="text-xs font-black text-red-600 leading-none">
                       ×{aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5)}
                     </span>
@@ -789,19 +901,24 @@ export default function MixerTab() {
                     {/* Top Bar: Metrics */}
                     <div className="bg-gray-50/50 border-b border-gray-100 px-4 md:px-6 py-3 flex flex-row flex-wrap items-center justify-between gap-4">
                       <div className="flex flex-row items-center gap-4 md:gap-6">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] md:text-xs font-black text-red-600 uppercase tracking-widest">Ohm</span>
-                          <div className="text-base md:text-lg font-black text-gray-900 leading-tight">{draft.uTotal.toFixed(0)}Ω</div>
+                        <div className="flex items-center gap-2" title="Final CVR">
+                          <span className="text-[10px] md:text-xs font-black text-red-600 uppercase tracking-widest">CVR</span>
+                          <div className="text-base md:text-lg font-black text-gray-900 leading-tight">{draft.uTotal.toFixed(0)}</div>
                         </div>
                         <div className="w-px h-5 bg-gray-300" />
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest">Load</span>
-                          <div className="text-sm font-black text-gray-700">{draft.rTotal.toFixed(0)}Ω</div>
+                        <div className="flex items-center gap-2" title="Term Count">
+                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest">TC</span>
+                          <div className="text-sm font-black text-gray-700">{draft.rTotal.toFixed(0)}</div>
                         </div>
                         <div className="w-px h-5 bg-gray-300" />
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest italic">Bias</span>
-                          <div className="text-sm font-black text-gray-700 leading-none">×{draft.iValue.toFixed(1)}</div>
+                        <div className="flex items-center gap-2" title="Length Complexity">
+                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest italic">LC</span>
+                          <div className="text-sm font-black text-gray-700 leading-none">×{draft.lc?.toFixed(1) || 1.0}</div>
+                        </div>
+                        <div className="w-px h-5 bg-gray-300" />
+                        <div className="flex items-center gap-2" title="Topic Level">
+                          <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest italic">TL</span>
+                          <div className="text-sm font-black text-gray-700 leading-none">×{draft.tl?.toFixed(1) || 1.0}</div>
                         </div>
                       </div>
                       

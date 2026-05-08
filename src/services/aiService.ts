@@ -16,6 +16,7 @@ export interface GenerateChunkParams {
   iValue: number;
   uTotal: number;
   theme?: string;
+  topicLevel?: number;
   sentenceLength?: SentenceLength;
   settings?: AISettings;
 }
@@ -28,6 +29,7 @@ export interface GeneratedChunkResponse {
 
 export interface AutoGenerateParams {
   theme: string;
+  topicLevel?: number;
   targetU: number;
   quantity: number;
   sentenceLength: SentenceLength;
@@ -235,6 +237,7 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
           endpoint,
           model: model,
           messages: [{ role: 'user', content: prompt }],
+          stream: false
         }),
       });
 
@@ -272,6 +275,24 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
       }
       // Handle raw text fallback from our proxy
       if (data.rawResponse) {
+        // Check if it looks like Server-Sent Events (SSE)
+        if (typeof data.rawResponse === 'string' && data.rawResponse.includes('data: {') && data.rawResponse.includes('"choices"')) {
+          let fullContent = '';
+          const lines = data.rawResponse.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+              try {
+                const chunk = JSON.parse(line.substring(6));
+                if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) {
+                  fullContent += chunk.choices[0].delta.content;
+                }
+              } catch (e) {
+                // Ignore parse errors for individual lines
+              }
+            }
+          }
+          if (fullContent) return fullContent;
+        }
         return data.rawResponse;
       }
       
@@ -328,7 +349,7 @@ function cleanJSON(text: string): string {
 }
 
 export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
-  const { resources, rTotal, iValue, uTotal, settings, theme, sentenceLength } = params;
+  const { resources, rTotal, iValue, uTotal, settings, theme, topicLevel, sentenceLength } = params;
   const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
   
   const currentLen = sentenceLength || 'Medium';
@@ -336,13 +357,24 @@ export async function generateChunk(params: GenerateChunkParams): Promise<Genera
   
   const targetSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
   const targetWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
-  const minWords = Math.max(5, targetWords - 10);
+  const minWords = Math.max(5, Math.floor(targetWords * 0.8));
 
 const prompt = `
 You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
 Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
 
-Target Theme/Topic: ${theme || 'General Conversation'}
+Target Theme/Topic: ${theme ? theme : 'Determine dynamically based on Topic Level (TL)'}
+Topic Level (TL target): ${topicLevel || 1.0}
+--- STRICT TL MAPPING RULES ---
+- TL 1.0 - 1.2: Daily life, casual chat, standard routines. (A1-A2 vocabulary)
+- TL 1.3 - 1.5: Professional work, academic study, intermediate lifestyle. (B1-B2 vocabulary)
+- TL 1.6 - 1.8: Industry-specific discussions, professional meetings, complex operations, business strategies. (B2-C1 vocabulary, natural professional communication)
+- TL 1.9 - 2.0: Intellectual discussions, macro-economics, specialized academia. (C1 vocabulary, advanced but plausible in high-level speech/debate)
+***ABSOLUTE RULE FOR HIGH TL (>= 1.6):***
+1. You are FORBIDDEN from generating casual, daily-life, or basic interpersonal scenarios.
+2. The language MUST be formal, academic, or professional.
+3. You MUST use sophisticated English vocabulary (B2/C1 level) appropriate for the topic, but it MUST sound natural in real-world professional or intellectual communication. DO NOT use obscure, archaic, or bizarrely low-frequency C2 words that nobody actually uses.
+-------------------------------
 Desired Sentence Length: ${currentLen}
 
 Algorithm Context:
@@ -358,12 +390,12 @@ Instructions:
 1. ABSOLUTE PRIORITY (Meaning & Logic): The final result MUST be a highly natural, logical, and meaningful sentence/paragraph in real-life context. Do NOT force words together if they create a nonsensical "Frankenstein" sentence. It MUST sound like something a native speaker would actually say in real conversation.
 2. Vietnamese First: Start by constructing a logical Vietnamese scenario encompassing the exact meaning of all input resources. Do NOT just list them. Think deeply to create a coherent story or point.
 3. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
-4. Length Calibration: Strictly follow the length constraints for "${currentLen}"!
+4. Length Calibration: Strictly follow the length constraints for "${currentLen}"! Calculate the word count based on the VIETNAMESE sentence.
    - You MUST generate EXACTLY ${targetSentences} sentence(s) (if "Very Short", exactly 1 small sentence).
-   - Total word count MUST be STRICTLY between ${minWords} and ${targetWords + 5} words. Do NOT generate less than ${minWords} words.
-5. Theme Adherence: The context MUST strictly revolve around the theme: ${theme || 'General'}.
+   - The total Vietnamese word count MUST be STRICTLY between ${minWords} and ${targetWords} words. Your sentence should ideally be close to ${targetWords} words, but absolutely NOT less than ${minWords}.
+5. Theme Adherence: The context MUST strictly revolve around the requested theme. If no theme is provided, dynamically formulate a specific, highly relevant theme that matches the STRICT TL MAPPING RULES. A casual context for a high TL is a critical failure.
 6. Energy Level: The structural complexity and vocabulary choice should reflect the U (Voltage) value: ${uTotal}. Higher U means more sophisticated grammar and nuanced meaning.
-7. Classification: Assign a relevant thematic category.
+7. Classification: Assign a specific thematic category. Ensure the category explicitly reflects the TL tier (e.g. "Supply Chain Management" for TL 1.7, not "General Conversation"). It MUST be extremely concise (Maximum 3-5 words), do NOT generate long descriptive phrases.
 8. Output Format: Return ONLY JSON. Ensure the final output is meaningful and accurately uses the input parameters.
 
 Output MUST be strictly in the following JSON format:
@@ -385,13 +417,13 @@ Output MUST be strictly in the following JSON format:
 }
 
 export async function generateAutoChunks(params: AutoGenerateParams): Promise<AutoGeneratedChunk[]> {
-  const { theme, targetU, quantity, sentenceLength, colorPreferences, availableResources, settings } = params;
+  const { theme, topicLevel, targetU, quantity, sentenceLength, colorPreferences, availableResources, settings } = params;
 
   const currentLen = sentenceLength || 'Medium';
   const constraints = settings?.sentenceConstraints?.[currentLen];
   const targetSentences = constraints?.maxSentences || (currentLen === 'Very Short' ? 1 : currentLen === 'Short' ? 2 : currentLen === 'Medium' ? 3 : 5);
   const targetWords = constraints?.maxWords || (currentLen === 'Very Short' ? 15 : currentLen === 'Short' ? 30 : currentLen === 'Medium' ? 60 : 100);
-  const minWords = Math.max(5, targetWords - 10);
+  const minWords = Math.max(5, Math.floor(targetWords * 0.8));
 
   // Pre-filter resources to balance them based on color preferences and target U
   const filteredAvailable = availableResources
@@ -415,7 +447,18 @@ const prompt = `
 You are a Master Linguistic Architect for the "CHUNKS" EdTech system.
 Your mission is to construct ${quantity} high-quality learning chunks.
 
-Theme: ${theme}
+Theme: ${theme ? theme : 'Determine dynamically based on Topic Level (TL)'}
+Topic Level (TL target): ${topicLevel || 1.0}
+--- STRICT TL MAPPING RULES ---
+- TL 1.0 - 1.2: Daily life, casual chat, standard routines. (A1-A2 vocabulary)
+- TL 1.3 - 1.5: Professional work, academic study, intermediate lifestyle. (B1-B2 vocabulary)
+- TL 1.6 - 1.8: Industry-specific discussions, professional meetings, complex operations, business strategies. (B2-C1 vocabulary, natural professional communication)
+- TL 1.9 - 2.0: Intellectual discussions, macro-economics, specialized academia. (C1 vocabulary, advanced but plausible in high-level speech/debate)
+***ABSOLUTE RULE FOR HIGH TL (>= 1.6):***
+1. You are FORBIDDEN from generating casual, daily-life, or basic interpersonal scenarios.
+2. The language MUST be formal, academic, or professional.
+3. You MUST use sophisticated English vocabulary (B2/C1 level) appropriate for the topic, but it MUST sound natural in real-world professional or intellectual communication. DO NOT use obscure, archaic, or bizarrely low-frequency C2 words that nobody actually uses.
+-------------------------------
 Target Voltage (U): ${targetU}
 Sentence Length Constraints ("${currentLen}"):
 - STRICTLY EXACTLY ${targetSentences} sentence(s) (if "Very Short", exactly 1 short sentence).
@@ -434,8 +477,9 @@ Construction Flow:
 2. ABSOLUTE PRIORITY (Meaning & Logic): The generated sentence MUST be highly natural, logical, and meaningful in everyday conversation. Do NOT forcibly combine incompatible phrases just to meet constraints. If the combination sounds awkward, change the context or pick different resources. It must sound like native speech.
 3. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the selected resources.
 4. English Translation: Translate that Vietnamese concept into natural English.
-5. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length exactly ${targetSentences} sentences and between ${minWords}-${targetWords + 5} words? If not, REGENERATE before outputting.
+5. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length exactly ${targetSentences} sentences and the Vietnamese word count strictly between ${minWords}-${targetWords} words? If not, REGENERATE before outputting.
 6. Final Validation: Ensure all resources used are from the provided list.
+7. Classification: Assign a specific thematic "category" string. Ensure the category explicitly reflects the TL tier (e.g. "Supply Chain Management" for TL 1.7). A casual context for a high TL is a critical failure. It MUST be extremely concise (Maximum 3-5 words), do NOT generate long descriptive phrases.
 
 Output strictly as JSON array:
 [
