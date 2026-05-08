@@ -164,9 +164,11 @@ export default function ChunksTab() {
       'English Sentence': c.engSentence,
       'Vietnamese Sentence': c.vieSentence,
       'Difficulty': c.difficultyLabel,
-      'Ohm (Total)': c.uTotal,
-      'Load (Base R)': c.rTotal,
-      'Bias (Multiplier)': c.iValue,
+      'CVR (Total)': c.uTotal,
+      'TC': c.rTotal,
+      'TL': c.tl || '',
+      'LC': c.lc || '',
+      'Bias (I)': c.iValue,
       'Audio URL': c.audioUrl || 'N/A',
       'Resources Used': c.resourcesUsed.map(r => typeof r === 'string' ? r : r.name).join(', ')
     }));
@@ -576,7 +578,7 @@ export default function ChunksTab() {
                          {chunk.category}
                        </span>
                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                         Load: {chunk.rTotal.toFixed(0)}Ω • Bias: ×{chunk.iValue.toFixed(1)}
+                         TC: {chunk.rTotal.toFixed(0)} • TL: {chunk.tl?.toFixed(1) || 'N/A'}{chunk.lc ? ` • LC: ${chunk.lc.toFixed(1)}` : ''}
                        </div>
                      </div>
                      

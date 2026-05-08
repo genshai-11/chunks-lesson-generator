@@ -10,6 +10,7 @@ export interface SentenceConstraint {
 export interface Resource {
   id: string;
   name: string;
+  hint?: string;
   color: ColorCategory;
   ohm: number;
   userId: string;
@@ -23,6 +24,8 @@ export interface Chunk {
   vieSentence: string;
   rTotal: number;
   iValue: number;
+  tl?: number;
+  lc?: number;
   uTotal: number;
   category: string;
   difficultyLabel: string;

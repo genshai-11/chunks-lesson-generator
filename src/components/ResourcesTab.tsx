@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Resource, ColorCategory } from '../types';
-import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2 } from 'lucide-react';
+import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
+import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2, Zap } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
 import { rawNuanceData } from '../data/nuanceData';
+import { generateChunk } from '../services/aiService';
 
 export default function ResourcesTab() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [name, setName] = useState('');
+  const [hint, setHint] = useState('');
   const [color, setColor] = useState<ColorCategory>('Green');
   const [ohm, setOhm] = useState<number | ''>('');
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [generatingPulse, setGeneratingPulse] = useState(false);
+  const [showPulseModal, setShowPulseModal] = useState(false);
+  const [pulseConfig, setPulseConfig] = useState<{quantity: number, topicLevel: number, sentenceLength: SentenceLength}>({
+    quantity: 2,
+    topicLevel: 1.0,
+    sentenceLength: 'Medium'
+  });
   const [stagedResources, setStagedResources] = useState<Partial<Resource>[]>([]);
   const [sheetUrl, setSheetUrl] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -157,6 +166,81 @@ export default function ResourcesTab() {
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+  };
+
+  const handleExecutePulse = async () => {
+    if (!auth.currentUser || selectedIds.size === 0) return;
+    
+    setGeneratingPulse(true);
+    try {
+      const selectedResources = resources.filter(r => selectedIds.has(r.id));
+      
+      let aiSettings: AISettings | undefined;
+      const settingsDocRef = doc(db, `workspaces/default/settings`, 'ai');
+      const docSnap = await getDoc(settingsDocRef);
+      if (docSnap.exists()) {
+        aiSettings = docSnap.data() as AISettings;
+      }
+      
+      if (!aiSettings) {
+        throw new Error("AI Settings not found. Please configure them in the Settings tab.");
+      }
+
+      const { quantity, topicLevel, sentenceLength } = pulseConfig;
+
+      const rTotal = selectedResources.reduce((sum, r) => sum + r.ohm, 0); 
+      const baseMultiplier = aiSettings.complexityMultipliers?.[sentenceLength] ?? 2;
+      const lc = Math.max(0.1, Math.round(baseMultiplier * 10) / 10);
+      const finalI = lc * topicLevel;
+      const uTotal = Math.round(rTotal * finalI * 10) / 10;
+
+      for (let i = 0; i < quantity; i++) {
+        const result = await generateChunk({
+          resources: selectedResources,
+          rTotal,
+          iValue: finalI,
+          uTotal,
+          settings: aiSettings,
+          theme: '', 
+          topicLevel: topicLevel,
+          sentenceLength: sentenceLength
+        });
+
+        let difficultyLabel = 'Beginner';
+        if (uTotal > 20) difficultyLabel = 'Intermediate';
+        if (uTotal > 50) difficultyLabel = 'Advanced';
+        if (uTotal > 100) difficultyLabel = 'Master';
+
+        const chunkData = {
+          resourcesUsed: selectedResources,
+          rTotal,
+          iValue: finalI,
+          tl: topicLevel,
+          lc,
+          uTotal,
+          engSentence: result.engSentence,
+          vieSentence: result.vieSentence,
+          category: result.category,
+          evaluation: (result as any).evaluation,
+          difficultyLabel,
+          userId: auth.currentUser.uid,
+          createdAt: new Date().toISOString()
+        };
+        
+        await addDoc(collection(db, `workspaces/default/chunks`), chunkData);
+      }
+      
+      setSelectedIds(new Set());
+      setPulseConfig({ quantity: 2, topicLevel: 1.0, sentenceLength: 'Medium' });
+      setShowPulseModal(false);
+      showToast(`${quantity} Pulse(s) generated and saved successfully!`);
+      
+    } catch (error) {
+      console.error(error);
+      showToast(error instanceof Error ? error.message : "Failed to generate pulse.");
+    } finally {
+      setGeneratingPulse(false);
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -350,10 +434,12 @@ export default function ResourcesTab() {
         name,
         color,
         ohm: Number(ohm),
+        hint,
         userId: auth.currentUser.uid,
         createdAt: new Date().toISOString()
       });
       setName('');
+      setHint('');
       setOhm('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `workspaces/default/resources`);
@@ -388,7 +474,8 @@ export default function ResourcesTab() {
       await updateDoc(docRef, {
         name: editData.name,
         color: editData.color,
-        ohm: Number(editData.ohm)
+        ohm: Number(editData.ohm),
+        hint: editData.hint || ''
       });
       setEditingId(null);
       setEditData({});
@@ -482,8 +569,9 @@ export default function ResourcesTab() {
         const rName = row['Resource_Name'] || row['name'];
         const rColor = row['Color_Category'] || row['color'];
         const rOhm = parseFloat(row['Base_Ohm'] || row['ohm']);
+        const rHint = row['Context_Hint'] || row['hint'] || row['EN_Hint'] || '';
         if (rName && ['Green', 'Blue', 'Pink', 'Red'].includes(rColor) && !isNaN(rOhm)) {
-           newStaged.push({ name: rName, color: rColor as ColorCategory, ohm: rOhm });
+           newStaged.push({ name: rName, color: rColor as ColorCategory, ohm: rOhm, hint: rHint });
            foundCustom = true;
         }
 
@@ -562,12 +650,14 @@ export default function ResourcesTab() {
           const rName = row['Resource_Name'] || row['name'];
           const rColor = row['Color_Category'] || row['color'];
           const rOhm = parseFloat(row['Base_Ohm'] || row['ohm']);
+          const rHint = row['Context_Hint'] || row['hint'] || row['EN_Hint'] || '';
 
           if (rName && validColors.includes(rColor) && !isNaN(rOhm)) {
             newStaged.push({
               name: rName,
               color: rColor as ColorCategory,
               ohm: rOhm,
+              hint: rHint,
             });
           }
         }
@@ -578,7 +668,7 @@ export default function ResourcesTab() {
   };
 
   const downloadSample = () => {
-    const csvContent = "Resource_Name,Color_Category,Base_Ohm\nExample Resource,Green,3.0\nAnother One,Red,7.0";
+    const csvContent = "Resource_Name,Color_Category,Base_Ohm,EN_Hint\nExample Resource,Green,3.0,example translation\nAnother One,Red,7.0,";
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -668,6 +758,82 @@ export default function ResourcesTab() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Pulse Generation Modal */}
+      <AnimatePresence>
+        {showPulseModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-100"
+            >
+              <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center">
+                <Zap className="w-5 h-5 mr-2 text-yellow-500" /> Pulse Configuration
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Quantity (1-10)</label>
+                  <input 
+                    type="number" min="1" max="10"
+                    value={pulseConfig.quantity}
+                    onChange={(e) => setPulseConfig({...pulseConfig, quantity: Number(e.target.value)})}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-red-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Topic Level ({pulseConfig.topicLevel.toFixed(1)})</label>
+                  <input 
+                    type="range" min="1.0" max="2.0" step="0.1"
+                    value={pulseConfig.topicLevel}
+                    onChange={(e) => setPulseConfig({...pulseConfig, topicLevel: Number(e.target.value)})}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                    <span>1.0 (Casual)</span>
+                    <span>2.0 (Advanced)</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Sentence Length</label>
+                  <select 
+                    value={pulseConfig.sentenceLength}
+                    onChange={(e) => setPulseConfig({...pulseConfig, sentenceLength: e.target.value as SentenceLength})}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-red-500"
+                  >
+                    <option value="Very Short">Very Short</option>
+                    <option value="Short">Short</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Long">Long</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowPulseModal(false)}
+                  disabled={generatingPulse}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExecutePulse}
+                  disabled={generatingPulse}
+                  className="flex items-center px-4 py-2 text-xs font-bold text-white bg-yellow-500 hover:bg-yellow-600 rounded-lg shadow-lg shadow-yellow-200 transition-colors disabled:opacity-50"
+                >
+                  {generatingPulse ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                  Execute {pulseConfig.quantity} Pulse(s)
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Dynamic Confirm Modal */}
       <AnimatePresence>
@@ -789,6 +955,7 @@ export default function ResourcesTab() {
               <thead className="bg-amber-50 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Name</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">EN Hint</th>
                   <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Color</th>
                   <th className="px-4 py-2 text-left text-xs font-bold text-amber-800 uppercase">Ohm</th>
                 </tr>
@@ -797,6 +964,7 @@ export default function ResourcesTab() {
                 {stagedResources.slice(0, 100).map((res, i) => (
                   <tr key={i}>
                     <td className="px-4 py-2 text-sm text-gray-700">{res.name}</td>
+                    <td className="px-4 py-2 text-sm text-gray-500">{res.hint || ''}</td>
                     <td className="px-4 py-2 text-sm">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getColorClass(res.color as ColorCategory)}`}>
                         {res.color}
@@ -879,7 +1047,7 @@ export default function ResourcesTab() {
             <div className="text-center">
               <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2 group-hover:text-red-500 transition-colors" />
               <p className="text-sm font-medium text-gray-700">Click or drag CSV to preview import</p>
-              <p className="text-xs text-gray-500 mt-1">Columns: Resource_Name, Color_Category, Base_Ohm</p>
+              <p className="text-xs text-gray-500 mt-1">Columns: Resource_Name, Color_Category, Base_Ohm, EN_Hint</p>
             </div>
           </div>
         </div>
@@ -898,6 +1066,16 @@ export default function ResourcesTab() {
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
               placeholder="e.g., Apple"
               required
+            />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">EN Hint (Optional)</label>
+            <input
+              type="text"
+              value={hint}
+              onChange={(e) => setHint(e.target.value)}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm"
+              placeholder="e.g., pipe dream"
             />
           </div>
           <div className="w-40">
@@ -957,12 +1135,22 @@ export default function ResourcesTab() {
                 </select>
               </div>
             </div>
-            <button 
-              onClick={handleBulkDelete}
-              className="flex items-center gap-1 bg-red-700 hover:bg-red-800 px-3 py-1 rounded text-sm font-bold transition-colors"
-            >
-              <Trash2 className="w-4 h-4" /> Delete Selected
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPulseModal(true)}
+                disabled={generatingPulse}
+                className="flex items-center gap-1 bg-yellow-400 text-yellow-900 hover:bg-yellow-500 px-3 py-1 rounded text-sm font-bold transition-colors disabled:opacity-50"
+              >
+                {generatingPulse ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} 
+                Generate Pulse
+              </button>
+              <button 
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1 bg-red-700 hover:bg-red-800 px-3 py-1 rounded text-sm font-bold transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+            </div>
           </div>
         )}
 
@@ -1035,6 +1223,9 @@ export default function ResourcesTab() {
                       {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                     </div>
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    EN Hint
+                  </th>
                   <th 
                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     onClick={() => handleSort('color')}
@@ -1077,6 +1268,19 @@ export default function ResourcesTab() {
                         />
                       ) : (
                         resource.name
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-[200px] truncate">
+                      {editingId === resource.id ? (
+                        <input
+                          type="text"
+                          value={editData.hint || ''}
+                          onChange={(e) => setEditData({ ...editData, hint: e.target.value })}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-red-500"
+                          placeholder="Optional EN translation hint"
+                        />
+                      ) : (
+                        resource.hint || <span className="text-gray-300 italic">None</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">

@@ -64,10 +64,15 @@ const COLOR_STYLES: Record<string, { text: string, bg: string, border: string, t
 
 const TOPIC_PRESETS = [
   { label: 'Daily Life & Casual (TL: 1.0)', value: 'Daily Life', tl: 1.0 },
-  { label: 'Travel & Lifestyle (TL: 1.2)', value: 'Travel', tl: 1.2 },
+  { label: 'Entertainment & Pop Culture (TL: 1.1)', value: 'Entertainment', tl: 1.1 },
+  { label: 'Travel & Tourism (TL: 1.2)', value: 'Travel', tl: 1.2 },
+  { label: 'Health & Wellness (TL: 1.3)', value: 'Health & Wellness', tl: 1.3 },
   { label: 'Workplace & Career (TL: 1.4)', value: 'Workplace', tl: 1.4 },
-  { label: 'Technology & Science (TL: 1.6)', value: 'Technology', tl: 1.6 },
+  { label: 'Education & Learning (TL: 1.5)', value: 'Education', tl: 1.5 },
+  { label: 'Technology & Innovation (TL: 1.6)', value: 'Technology', tl: 1.6 },
+  { label: 'Environment & Sustainability (TL: 1.7)', value: 'Environment', tl: 1.7 },
   { label: 'Business & Economics (TL: 1.8)', value: 'Business & Economics', tl: 1.8 },
+  { label: 'Politics & Society (TL: 1.9)', value: 'Politics & Society', tl: 1.9 },
   { label: 'Philosophy & Academic (TL: 2.0)', value: 'Academic', tl: 2.0 },
 ];
 
@@ -428,6 +433,8 @@ export default function MixerTab() {
           resourcesUsed: draft.resourcesUsed,
           rTotal: draft.rTotal,
           iValue: draft.iValue,
+          tl: draft.tl,
+          lc: draft.lc,
           uTotal: draft.uTotal,
           engSentence: draft.result.engSentence,
           vieSentence: draft.result.vieSentence,
@@ -472,6 +479,8 @@ export default function MixerTab() {
         resourcesUsed: draft.resourcesUsed,
         rTotal: draft.rTotal,
         iValue: draft.iValue,
+        tl: draft.tl,
+        lc: draft.lc,
         uTotal: draft.uTotal,
         engSentence: draft.result.engSentence,
         vieSentence: draft.result.vieSentence,

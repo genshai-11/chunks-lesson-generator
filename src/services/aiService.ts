@@ -350,7 +350,7 @@ function cleanJSON(text: string): string {
 
 export async function generateChunk(params: GenerateChunkParams): Promise<GeneratedChunkResponse> {
   const { resources, rTotal, iValue, uTotal, settings, theme, topicLevel, sentenceLength } = params;
-  const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm)`).join(', ');
+  const resourceList = resources.map(r => `${r.name} (${r.color}, ${r.ohm} Ohm${r.hint ? `, Context Hint: ${r.hint}` : ''})`).join(', ');
   
   const currentLen = sentenceLength || 'Medium';
   const constraints = settings?.sentenceConstraints?.[currentLen];
@@ -386,10 +386,18 @@ Algorithm Context:
 Input Resources to include in the sentence:
 ${resourceList}
 
+*** CRITICAL RULES FOR HINTS ***
+1. The 'Context Hint' (if provided) is STRICTLY for the English translation ('engSentence').
+2. Do NOT insert the English 'Context Hint' directly into the Vietnamese sentence. The Vietnamese sentence MUST ONLY use the natural Vietnamese word.
+3. For example, if the Resource is 'Chị Hằng' and the Hint is 'The Moon Lady':
+   - Correct vieSentence: "Giảng viên phân tích hình tượng Chị Hằng."
+   - Correct engSentence: "The lecturer analyzed the image of The Moon Lady."
+   - INCORRECT vieSentence: "Giảng viên phân tích hình tượng The Moon Lady." (DO NOT do this!)
+
 Instructions:
 1. ABSOLUTE PRIORITY (Meaning & Logic): The final result MUST be a highly natural, logical, and meaningful sentence/paragraph in real-life context. Do NOT force words together if they create a nonsensical "Frankenstein" sentence. It MUST sound like something a native speaker would actually say in real conversation.
-2. Vietnamese First: Start by constructing a logical Vietnamese scenario encompassing the exact meaning of all input resources. Do NOT just list them. Think deeply to create a coherent story or point.
-3. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. The English version must carry the same semantic integrity and clear intent.
+2. Vietnamese First: Start by constructing a logical Vietnamese scenario encompassing the exact meaning of all input resources. Frame the sentence completely in natural Vietnamese. Do NOT insert any English words from the hints into the Vietnamese sentence.
+3. English Translation: Translate that Vietnamese concept into a natural-sounding English equivalent. This is where you apply the 'Context Hint' to translate specific terminology. The English version must carry the same semantic integrity and clear intent.
 4. Length Calibration: Strictly follow the length constraints for "${currentLen}"! Calculate the word count based on the VIETNAMESE sentence.
    - You MUST generate EXACTLY ${targetSentences} sentence(s) (if "Very Short", exactly 1 small sentence).
    - The total Vietnamese word count MUST be STRICTLY between ${minWords} and ${targetWords} words. Your sentence should ideally be close to ${targetWords} words, but absolutely NOT less than ${minWords}.
@@ -435,7 +443,8 @@ export async function generateAutoChunks(params: AutoGenerateParams): Promise<Au
     id: r.id,
     name: r.name,
     color: r.color,
-    ohm: r.ohm
+    ohm: r.ohm,
+    hint: r.hint
   }));
 
   const formulaType = settings?.formulaType || 'sum';
@@ -468,6 +477,14 @@ Color Preferences: ${colorPreferences.join(', ')}
 Available Ingredients (Resources):
 ${JSON.stringify(resourceList)}
 
+*** CRITICAL RULES FOR HINTS ***
+1. The 'hint' (if provided) is STRICTLY for the English translation ('engSentence').
+2. Do NOT insert the English 'hint' directly into the Vietnamese sentence. The Vietnamese sentence MUST ONLY use the natural Vietnamese word.
+3. For example, if the Resource is 'Chị Hằng' and the Hint is 'The Moon Lady':
+   - Correct vieSentence: "Giảng viên phân tích hình tượng Chị Hằng."
+   - Correct engSentence: "The lecturer analyzed the image of The Moon Lady."
+   - INCORRECT vieSentence: "Giảng viên phân tích hình tượng The Moon Lady." (DO NOT do this!)
+
 Physics Logic:
 ${physicsLogic}
 - U = Complexity Multiplier * R_total.
@@ -475,8 +492,8 @@ ${physicsLogic}
 Construction Flow:
 1. Resource Selection: Pick 2-4 resources that mathematically approach the Target U.
 2. ABSOLUTE PRIORITY (Meaning & Logic): The generated sentence MUST be highly natural, logical, and meaningful in everyday conversation. Do NOT forcibly combine incompatible phrases just to meet constraints. If the combination sounds awkward, change the context or pick different resources. It must sound like native speech.
-3. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the selected resources.
-4. English Translation: Translate that Vietnamese concept into natural English.
+3. Vietnamese First Draft: Think deeply and construct a logical, highly natural Vietnamese sentence (or paragraph, reflecting the Sentence Length constraint) encompassing the selected resources. Frame the sentence completely in natural Vietnamese without English hints.
+4. English Translation: Translate that Vietnamese concept into natural English. Apply the 'hint' here to translate specific terminology.
 5. Evaluation: SELF-CRITIQUE the sentence. Does it make sense? Is the length exactly ${targetSentences} sentences and the Vietnamese word count strictly between ${minWords}-${targetWords} words? If not, REGENERATE before outputting.
 6. Final Validation: Ensure all resources used are from the provided list.
 7. Classification: Assign a specific thematic "category" string. Ensure the category explicitly reflects the TL tier (e.g. "Supply Chain Management" for TL 1.7). A casual context for a high TL is a critical failure. It MUST be extremely concise (Maximum 3-5 words), do NOT generate long descriptive phrases.
