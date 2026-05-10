@@ -206,6 +206,9 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
       const response = await gClient.models.generateContent({
         model: primaryModel,
         contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
       });
       if (response.text) return response.text;
     } catch (error) {
@@ -214,6 +217,9 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
       const response = await gClient.models.generateContent({
         model: fallbackModel,
         contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
       });
       if (!response.text) throw new Error("No response from Gemini fallback");
       return response.text;
@@ -310,6 +316,9 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
     const response = await gClient.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        responseMimeType: 'application/json'
+      }
     });
     if (response.text) return response.text;
   } catch (geminiError) {
@@ -415,12 +424,16 @@ Output MUST be strictly in the following JSON format:
 }
 `;
   const responseText = await callAI(prompt, settings);
+  if (!responseText || !responseText.trim()) {
+    throw new Error("AI returned an empty response. This may be due to safety filters blocking the content or an API error.");
+  }
   const cleanText = cleanJSON(responseText);
+  
   try {
     return JSON.parse(cleanText) as GeneratedChunkResponse & { evaluation?: string };
   } catch (e) {
     console.error("Failed to parse AI response:", cleanText);
-    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}. Response was: ${cleanText.substring(0, 100)}...`);
   }
 }
 
@@ -515,7 +528,11 @@ Output strictly as JSON array:
 `;
 
   const responseText = await callAI(prompt, settings);
+  if (!responseText || !responseText.trim()) {
+    throw new Error("AI returned an empty response. This may be due to safety filters blocking the content or an API error.");
+  }
   const cleanText = cleanJSON(responseText);
+
   try {
     let results = JSON.parse(cleanText);
     
@@ -539,6 +556,6 @@ Output strictly as JSON array:
       .filter(r => !r.evaluation || r.evaluation.toLowerCase().includes('pass'));
   } catch (e) {
     console.error("Failed to parse AI response:", cleanText);
-    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    throw new Error(`AI returned invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}. Response was: ${cleanText.substring(0, 100)}...`);
   }
 }

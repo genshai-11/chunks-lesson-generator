@@ -231,6 +231,26 @@ export default function MixerTab() {
     }
   };
 
+  const handleSentenceLengthSelect = (len: SentenceLength) => {
+    setAiSentenceLength(len);
+    
+    if (blueprintMode === 'targetOhm') {
+      let minTC = 3;
+      let maxTC = 9;
+      if (len === 'Short') { minTC = 9; maxTC = 15; }
+      else if (len === 'Medium') { minTC = 15; maxTC = 21; }
+      else if (len === 'Long') { minTC = 21; maxTC = 27; }
+      
+      const lc = aiSettings?.complexityMultipliers?.[len] ?? (len === 'Very Short' ? 1 : len === 'Short' ? 1.5 : len === 'Medium' ? 2 : 2.5);
+      const minCVR = Math.round(lc * aiTopicLevel * minTC);
+      const maxCVR = Math.round(lc * aiTopicLevel * maxTC);
+      
+      if (aiTargetCVR < minCVR || aiTargetCVR > maxCVR) {
+        showToast(`Warning: Target CVR (${aiTargetCVR}) might not be optimal for ${len} chunks. Recommended: ${minCVR}-${maxCVR}.`);
+      }
+    }
+  };
+
   const handlePrepareBlueprint = () => {
     if (resources.length === 0) return;
     
@@ -292,21 +312,25 @@ export default function MixerTab() {
         let attempts = 0;
         const maxAttempts = 500; 
         
+        let targetItemCount = 1;
+        if (aiSentenceLength === 'Short') targetItemCount = 2;
+        if (aiSentenceLength === 'Medium') targetItemCount = 3;
+        if (aiSentenceLength === 'Long') targetItemCount = 4;
+
         while (attempts < maxAttempts) {
           let testCombo: Resource[] = [];
           
-          // Vary the number of colors to mix to avoid always being "full"
-          const numColorsToMix = Math.max(1, Math.floor(Math.random() * availableColors.length) + 1);
-          const shuffledColors = [...availableColors].sort(() => 0.5 - Math.random()).slice(0, numColorsToMix);
-
-          shuffledColors.forEach(color => {
-            const itemsInColor = resourcesByColor[color];
-            const limit = Math.min(aiMaxPerColor, itemsInColor.length);
-            // Randomly decide how many items from this color to add
-            const numItems = Math.floor(Math.random() * limit) + 1;
-            const shuffledItems = [...itemsInColor].sort(() => 0.5 - Math.random()).slice(0, numItems);
-            testCombo.push(...shuffledItems);
-          });
+          const tempResources = [...filteredResources].sort(() => 0.5 - Math.random());
+          const colorCounts: Record<string, number> = {};
+          
+          for (const r of tempResources) {
+            if (testCombo.length >= targetItemCount) break;
+            const count = colorCounts[r.color] || 0;
+            if (count < aiMaxPerColor) {
+              testCombo.push(r);
+              colorCounts[r.color] = count + 1;
+            }
+          }
 
           const testBaseTC = calculateOhm(testCombo);
           
@@ -505,16 +529,29 @@ export default function MixerTab() {
     );
   };
 
+  // Calculate current CVR safety zone
+  let currentMinTC = 3;
+  let currentMaxTC = 9;
+  if (aiSentenceLength === 'Short') { currentMinTC = 9; currentMaxTC = 15; }
+  else if (aiSentenceLength === 'Medium') { currentMinTC = 15; currentMaxTC = 21; }
+  else if (aiSentenceLength === 'Long') { currentMinTC = 21; currentMaxTC = 27; }
+  
+  const currentLC = aiSettings?.complexityMultipliers?.[aiSentenceLength] ?? (aiSentenceLength === 'Very Short' ? 1 : aiSentenceLength === 'Short' ? 1.5 : aiSentenceLength === 'Medium' ? 2 : 2.5);
+  const currentMinCVR = Math.round(currentLC * aiTopicLevel * currentMinTC);
+  const currentMaxCVR = Math.round(currentLC * aiTopicLevel * currentMaxTC);
+
+  const isCVRSafe = aiTargetCVR >= currentMinCVR && aiTargetCVR <= currentMaxCVR;
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-20 left-1/2 z-50 px-6 py-3 bg-gray-900 text-white text-sm font-bold rounded-full shadow-2xl"
+            initial={{ opacity: 0, scale: 0.9, x: '-50%', y: '-50%' }}
+            animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+            exit={{ opacity: 0, scale: 0.9, x: '-50%', y: '-50%' }}
+            className="fixed top-1/2 left-1/2 z-[100] px-6 py-4 bg-gray-900 border border-gray-700 text-white text-sm font-bold rounded-2xl shadow-2xl max-w-sm text-center"
           >
             {toastMessage}
           </motion.div>
@@ -647,15 +684,41 @@ export default function MixerTab() {
                 {blueprintMode === 'targetOhm' ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Target CVR</label>
+                      <div className="relative group/cvr">
+                        <label className="flex items-center text-xs font-black text-gray-400 uppercase tracking-widest mb-1 cursor-help">
+                          Target CVR
+                          <Info className="w-3.5 h-3.5 ml-1.5" />
+                        </label>
                         <input
                           type="number"
                           value={aiTargetCVR}
                           onChange={(e) => setAiTargetCVR(Number(e.target.value))}
-                          className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm font-bold"
+                          className={`w-full rounded-xl shadow-sm border p-3 text-sm font-bold transition-colors ${
+                            isCVRSafe 
+                              ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50 text-green-900' 
+                              : 'border-red-300 focus:border-red-500 focus:ring-red-500 bg-red-50 text-red-900'
+                          }`}
                           min="5"
                         />
+                        {!isCVRSafe && (
+                          <div className="absolute top-[28px] right-3 flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                          </div>
+                        )}
+                        <div className="absolute top-full left-0 mt-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover/cvr:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal shadow-xl">
+                          <div className="space-y-1.5">
+                            <div className="font-bold text-gray-300 uppercase tracking-widest mb-2 border-b border-gray-700 pb-1.5 text-[9px]">CVR Target Zones (Based on TL {aiTopicLevel})</div>
+                            <div className="flex justify-between items-center"><span className="text-pink-400 font-bold uppercase tracking-widest text-[9px]">Very Short:</span> <span>{Math.round((aiSettings?.complexityMultipliers?.['Very Short'] ?? 1) * aiTopicLevel * 3)} - {Math.round((aiSettings?.complexityMultipliers?.['Very Short'] ?? 1) * aiTopicLevel * 9)}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-blue-400 font-bold uppercase tracking-widest text-[9px]">Short:</span> <span>{Math.round((aiSettings?.complexityMultipliers?.['Short'] ?? 1.5) * aiTopicLevel * 9)} - {Math.round((aiSettings?.complexityMultipliers?.['Short'] ?? 1.5) * aiTopicLevel * 15)}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-yellow-400 font-bold uppercase tracking-widest text-[9px]">Medium:</span> <span>{Math.round((aiSettings?.complexityMultipliers?.['Medium'] ?? 2) * aiTopicLevel * 15)} - {Math.round((aiSettings?.complexityMultipliers?.['Medium'] ?? 2) * aiTopicLevel * 21)}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-green-400 font-bold uppercase tracking-widest text-[9px]">Long:</span> <span>{Math.round((aiSettings?.complexityMultipliers?.['Long'] ?? 2.5) * aiTopicLevel * 21)} - {Math.round((aiSettings?.complexityMultipliers?.['Long'] ?? 2.5) * aiTopicLevel * 27)}</span></div>
+                            <div className="mt-2 pt-2 border-t border-gray-700 text-gray-400 leading-tight">
+                              Current target <b className={isCVRSafe ? "text-green-400" : "text-red-400"}>{aiTargetCVR}</b> is {isCVRSafe ? 'within' : 'outside'} the recommended zone for <b className="text-white">{aiSentenceLength}</b>.
+                            </div>
+                          </div>
+                          <div className="absolute bottom-[100%] left-6 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Quantity</label>
@@ -726,10 +789,10 @@ export default function MixerTab() {
                        <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help" />
                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-[10px] rounded-lg p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 font-medium normal-case tracking-normal">
                          <div className="space-y-2">
-                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span> <span className="text-[9px] text-gray-400">- Single sentence</span><br/>Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxSentences ?? 1} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxWords ?? 15} words</div>
-                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span> <span className="text-[9px] text-gray-400">- Two sentences</span><br/>Max {aiSettings?.sentenceConstraints?.['Short']?.maxSentences ?? 2} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Short']?.maxWords ?? 30} words</div>
-                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span> <span className="text-[9px] text-gray-400">- Paragraph</span><br/>Max {aiSettings?.sentenceConstraints?.['Medium']?.maxSentences ?? 3} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Medium']?.maxWords ?? 60} words</div>
-                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span> <span className="text-[9px] text-gray-400">- Short Essay</span><br/>Max {aiSettings?.sentenceConstraints?.['Long']?.maxSentences ?? 5} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Long']?.maxWords ?? 100} words</div>
+                           <div><span className="font-bold text-pink-400 uppercase tracking-wide text-[9px]">Very Short</span> <span className="text-[9px] text-gray-400">- Single sentence</span><br/>Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxSentences ?? 1} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Very Short']?.maxWords ?? 15} words<br/><span className="text-pink-300">Target TC: 1 Term</span></div>
+                           <div><span className="font-bold text-blue-400 uppercase tracking-wide text-[9px]">Short</span> <span className="text-[9px] text-gray-400">- Two sentences</span><br/>Max {aiSettings?.sentenceConstraints?.['Short']?.maxSentences ?? 2} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Short']?.maxWords ?? 30} words<br/><span className="text-blue-300">Target TC: 2 Terms</span></div>
+                           <div><span className="font-bold text-yellow-400 uppercase tracking-wide text-[9px]">Medium</span> <span className="text-[9px] text-gray-400">- Paragraph</span><br/>Max {aiSettings?.sentenceConstraints?.['Medium']?.maxSentences ?? 3} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Medium']?.maxWords ?? 60} words<br/><span className="text-yellow-300">Target TC: 3 Terms</span></div>
+                           <div><span className="font-bold text-green-400 uppercase tracking-wide text-[9px]">Long</span> <span className="text-[9px] text-gray-400">- Short Essay</span><br/>Max {aiSettings?.sentenceConstraints?.['Long']?.maxSentences ?? 5} sentence(s) • Max {aiSettings?.sentenceConstraints?.['Long']?.maxWords ?? 100} words<br/><span className="text-green-300">Target TC: 4 Terms</span></div>
                          </div>
                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                        </div>
@@ -739,18 +802,24 @@ export default function MixerTab() {
                     {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => {
                       let minItems = 1;
                       let maxItems = 1; // Very Short: 1 item
-                      let minTargetOhm = 3;
-                      let maxTargetOhm = 9;
+                      let minTC = 3;
+                      let maxTC = 9;
                       
-                      if (len === 'Short') { minItems = 2; maxItems = 2; minTargetOhm = 12; maxTargetOhm = 24;} // Short: 2 items
-                      else if (len === 'Medium') { minItems = 2; maxItems = 3; minTargetOhm = 16; maxTargetOhm = 45;} // Medium: 2-3 items
-                      else if (len === 'Long') { minItems = 4; maxItems = 4; minTargetOhm = 35; maxTargetOhm = 90;} // Long: 4 items
+                      if (len === 'Short') { minItems = 2; maxItems = 2; minTC = 9; maxTC = 15; }
+                      else if (len === 'Medium') { minItems = 3; maxItems = 3; minTC = 15; maxTC = 21; }
+                      else if (len === 'Long') { minItems = 4; maxItems = 4; minTC = 21; maxTC = 27; }
+                      
+                      const lc = aiSettings?.complexityMultipliers?.[len] ?? (len === 'Very Short' ? 1 : len === 'Short' ? 1.5 : len === 'Medium' ? 2 : 2.5);
+                      const tl = aiTopicLevel;
+                      
+                      const minTargetOhm = Math.round(lc * tl * minTC);
+                      const maxTargetOhm = Math.round(lc * tl * maxTC);
                       
                       const suggestedText = `${minTargetOhm}-${maxTargetOhm}`;
                       
                       let isRecommended = true;
                       if (blueprintMode === 'targetOhm') {
-                        isRecommended = aiTargetCVR >= (minTargetOhm * 0.7) && aiTargetCVR <= (maxTargetOhm * 1.3);
+                        isRecommended = aiTargetCVR >= minTargetOhm && aiTargetCVR <= maxTargetOhm;
                       } else if (blueprintMode === 'recipe') {
                         const totalRecipeItems = Object.values(aiRecipe).reduce((sum, count) => sum + count, 0);
                         if (totalRecipeItems > 0) {
@@ -761,7 +830,7 @@ export default function MixerTab() {
                       return (
                         <button
                           key={len}
-                          onClick={() => setAiSentenceLength(len)}
+                          onClick={() => handleSentenceLengthSelect(len)}
                           className={`flex-1 flex text-xs items-center justify-center flex-col py-2 font-black uppercase tracking-widest rounded-lg transition-all text-center leading-tight ${
                             aiSentenceLength === len 
                               ? 'bg-white text-red-600 shadow-sm'
