@@ -372,7 +372,7 @@ const prompt = `
 You are an expert linguist and curriculum designer for an EdTech system called "CHUNKS".
 Your task is to generate a bilingual sentence (Vietnamese first, then English) based on a set of input resources and a specific algorithm.
 
-Target Theme/Topic: ${theme ? theme : 'Determine dynamically based on Topic Level (TL)'}
+Target Theme/Topic: ${theme === 'INFER_FROM_RESOURCES' ? 'Dynamically infer the most logical and specific theme entirely based on the provided Input Resources. Do NOT use a random theme.' : (theme ? theme : 'Dynamically formulate a random specific theme that completely aligns with the STRICT TL MAPPING RULES below. Do not be generic.')}
 Topic Level (TL target): ${topicLevel || 1.0}
 --- STRICT TL MAPPING RULES ---
 - TL 1.0 - 1.2: Daily life, casual chat, standard routines. (A1-A2 vocabulary)

@@ -1,0 +1,3553 @@
+200
+[
+  {
+    "id": "gemini",
+    "object": "model",
+    "owned_by": "combo"
+  },
+  {
+    "id": "free",
+    "object": "model",
+    "owned_by": "combo"
+  },
+  {
+    "id": "gpt",
+    "object": "model",
+    "owned_by": "combo"
+  },
+  {
+    "id": "full-model",
+    "object": "model",
+    "owned_by": "combo"
+  },
+  {
+    "id": "kr/claude-sonnet-4.5",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "kr/claude-haiku-4.5",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "kr/deepseek-3.2",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "kr/qwen3-coder-next",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "kr/glm-5",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "kr/MiniMax-M2.5",
+    "object": "model",
+    "owned_by": "kr"
+  },
+  {
+    "id": "openrouter/openrouter/free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/google/gemma-4-31b-it:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/google/gemma-4-26b-a4b-it:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/openrouter/owl-alpha",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/nvidia/nemotron-3-nano-30b-a3b:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/google/lyria-3-pro-preview",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/google/lyria-3-clip-preview",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/inclusionai/ring-2.6-1t:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "openrouter/qwen/qwen3-coder:free",
+    "object": "model",
+    "owned_by": "openrouter"
+  },
+  {
+    "id": "if/qwen3-coder-plus",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-max",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-vl-plus",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-max-preview",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-235b",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-235b-a22b-instruct",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-235b-a22b-thinking-2507",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/qwen3-32b",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/kimi-k2",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/deepseek-v3.2",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/deepseek-v3.1",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/deepseek-v3",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/deepseek-r1",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/glm-4.7",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "if/iflow-rome-30ba3b",
+    "object": "model",
+    "owned_by": "if"
+  },
+  {
+    "id": "nvidia/minimaxai/minimax-m2.7",
+    "object": "model",
+    "owned_by": "nvidia"
+  },
+  {
+    "id": "nvidia/z-ai/glm4.7",
+    "object": "model",
+    "owned_by": "nvidia"
+  },
+  {
+    "id": "nvidia/parakeet-ctc-1.1b-asr",
+    "object": "model",
+    "owned_by": "nvidia"
+  },
+  {
+    "id": "cx/gpt-5.5",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.5-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.4",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.4-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-xhigh",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-xhigh-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-high",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-high-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-low",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-low-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-none",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-none-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-spark",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.3-codex-spark-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-mini",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-mini-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-mini-high",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-mini-high-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.2-codex",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.2-codex-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.2",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.2-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-max",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-max-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-codex-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5.1-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5-codex",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5-codex-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5-codex-mini",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "cx/gpt-5-codex-mini-review",
+    "object": "model",
+    "owned_by": "cx"
+  },
+  {
+    "id": "kc/anthropic/claude-sonnet-4-20250514",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/anthropic/claude-opus-4-20250514",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/google/gemini-2.5-pro",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/google/gemini-2.5-flash",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/openai/gpt-4.1",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/openai/o3",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/deepseek/deepseek-chat",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "kc/deepseek/deepseek-reasoner",
+    "object": "model",
+    "owned_by": "kc"
+  },
+  {
+    "id": "cmc/deepseek/deepseek-v4-pro",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/deepseek/deepseek-v4-flash",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/moonshotai/Kimi-K2.6",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/moonshotai/Kimi-K2.5",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/zai-org/GLM-5.1",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/zai-org/GLM-5",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/MiniMaxAI/MiniMax-M2.7",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/MiniMaxAI/MiniMax-M2.5",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/Qwen/Qwen3.6-Max-Preview",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/Qwen/Qwen3.6-Plus",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "cmc/stepfun/Step-3.5-Flash",
+    "object": "model",
+    "owned_by": "cmc"
+  },
+  {
+    "id": "vx/gemini-3.1-pro-preview",
+    "object": "model",
+    "owned_by": "vx"
+  },
+  {
+    "id": "vx/gemini-3.1-flash-lite-preview",
+    "object": "model",
+    "owned_by": "vx"
+  },
+  {
+    "id": "vx/gemini-3-flash-preview",
+    "object": "model",
+    "owned_by": "vx"
+  },
+  {
+    "id": "vx/gemini-2.5-flash",
+    "object": "model",
+    "owned_by": "vx"
+  },
+  {
+    "id": "gemini/gemini-3.1-pro-preview",
+    "object": "model",
+    "owned_by": "gemini"
+  },
+  {
+    "id": "gemini/gemini-3.1-flash-lite-preview",
+    "object": "model",
+    "owned_by": "gemini"
+  },
+  {
+    "id": "gemini/gemini-3-flash-preview",
+    "object": "model",
+    "owned_by": "gemini"
+  },
+  {
+    "id": "gemini/gemini-2.0-flash-lite",
+    "object": "model",
+    "owned_by": "gemini"
+  },
+  {
+    "id": "gemini/gemma-4-31b-it",
+    "object": "model",
+    "owned_by": "gemini"
+  },
+  {
+    "id": "ali/qwen3.6-27b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-plus-2026-04-20",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-max-preview",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-35b-a3b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-flash-2026-04-16",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-plus-realtime-2026-03-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-plus-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-plus-2026-03-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-flash-realtime-2026-03-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-flash-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-flash-2026-03-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-omni-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-plus-2026-04-02",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.6-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/deepseek-v3.2",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-asr-flash-2026-02-10",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-flash-2026-02-23",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-122b-a10b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-35b-a3b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-27b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-next",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-397b-a17b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-plus-2026-02-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3.5-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-asr-flash-realtime-2026-02-10",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-flash-2026-01-22",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-max-2026-01-23",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-character",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-flash-character",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-plus-2025-12-19",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash-realtime-2025-12-01",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash-2025-12-01",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-livetranslate-flash-2025-12-01",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-livetranslate-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-mt-lite",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-2025-12-01",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-ocr-2025-11-20",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-mt-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/ccai-pro",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/tongyi-tingwu-slp",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-asr-flash-realtime-2025-10-27",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-asr-flash-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-flash-2025-10-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash-2025-09-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-flash-realtime-2025-09-15",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-omni-30b-a3b-captioner",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-s2s-flash-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-livetranslate-flash-realtime",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-livetranslate-flash-realtime-2025-09-22",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-7b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-14b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-32b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-72b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-14b-instruct-1m",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-7b-instruct-1m",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-max-2025-01-25",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-max-latest",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-turbo-2024-11-01",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-turbo-latest",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-latest",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-2025-01-25",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwq-plus-2025-03-05",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-mt-turbo",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-mt-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-coder-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwq-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2.5-vl-32b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qvq-max",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-omni-turbo",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-8b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-30b-a3b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-235b-a22b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-turbo-2025-04-28",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-2025-04-28",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-max-2025-04-08",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-plus-2025-01-25",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-plus-latest",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-max-latest",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-plus-2025-05-07",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-480b-a35b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-235b-a22b-instruct-2507",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-2025-07-14",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-plus-2025-07-22",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-235b-a22b-thinking-2507",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-flash",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-max",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-max-2025-08-13",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-max",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-max-2025-09-23",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-235b-a22b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-235b-a22b-thinking",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-30b-a3b-thinking-2507",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-30b-a3b-instruct-2507",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-14b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-32b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-0.6b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-4b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-1.7b",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-vl-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-coder-plus-2025-09-23",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-vl-plus-2025-09-23",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus-2025-09-11",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-next-80b-a3b-thinking",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-next-80b-a3b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen3-max-preview",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen2-7b-instruct",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-max",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-plus",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "ali/qwen-turbo",
+    "object": "model",
+    "owned_by": "ali"
+  },
+  {
+    "id": "COMET/abab5.5-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab5.5s-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab6-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab6.5g-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab6.5s-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab6.5t-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/abab7-chat-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/act_two",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/bria_text_to_vector",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/bytedance-seedream-4-0-250828",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-haiku-4-5-20251001",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-1-20250805",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-1-20250805-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-20250514",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-20250514-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-5-20251101",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-5-20251101-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-7",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-opus-4-7-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-20250514",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-20250514-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-5-20250929",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-5-20250929-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/claude-sonnet-4-6-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-haiku-4-5-20251001",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-1-20250805",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-1-20250805-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-20250514",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-20250514-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-5-20251101",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-5-20251101-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-7",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-opus-4-7-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-20250514",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-20250514-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-5-20250929",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-5-20250929-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/cometapi-sonnet-4-6-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepl-en",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepl-zh",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-r1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-ai/DeepSeek-V3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-chat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-ocr",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-ocr-2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-r1-0528",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-reasoner",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3-1-250821",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3-250324",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3.2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3.2-exp",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/DeepSeek-V3.2-Exp-nothinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/DeepSeek-V3.2-Exp-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v3.2-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v4-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/deepseek-v4-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1-6-250615",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1-6-flash-250615",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1-8-251228",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1.6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1.6-250615",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-1.8",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-2-0-code-preview-260215",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-2-0-lite-260215",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-2-0-mini-260215",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seed-2-0-pro-260215",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedance-1-5-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedance-2-0",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seededit-3-0-i2i-250628",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedream-3-0-t2i-250415",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedream-4-0-250828",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedream-4-5-251128",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/doubao-seedream-5-0-260128",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-deepsearch",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-lite",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-lite-preview-06-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-lite-preview-06-17-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-lite-preview-09-2025",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-lite-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-preview-04-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-preview-05-20",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-preview-09-2025",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-flash-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-deepsearch",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-exp-03-25",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-preview-03-25",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-preview-05-06",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-preview-06-05",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-2.5-pro-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash-deepsearch",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash-preview-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-flash-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-pro-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-pro-deepsearch",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-pro-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3-pro-preview-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-flash-lite",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-flash-lite-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-flash-lite-preview-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-flash-lite-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-pro-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-pro-preview-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gemini-3.1-pro-preview-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gen3a_turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gen4_aleph",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gen4_turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.5-air",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.5-airx",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.5-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.5-x",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.6v",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.6v-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.6v-flashx",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.7",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.7-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-4.7-flashx",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-5-turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/glm-5.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4-vision-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1-2025-04-14",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1-mini-2025-04-14",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1-nano",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4.1-nano-2025-04-14",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-2024-05-13",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-2024-08-06",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-2024-11-20",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-2024-07-18",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-realtime-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-realtime-preview-2024-12-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-search-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-search-preview-2025-03-11",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-mini-transcribe",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-realtime-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-realtime-preview-2024-10-01",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-realtime-preview-2024-12-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-realtime-preview-2025-06-03",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-search",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-search-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-search-preview-2025-03-11",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-4o-transcribe",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-2025-08-07",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-chat-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-codex",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-codex-high",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-codex-low",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-codex-medium",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-high",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-low",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-medium",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-mini-2025-08-07",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-minimal",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-nano",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-nano-2025-08-07",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-pro-2025-10-06",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5-thinking-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.1-chat-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.1-codex",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.1-codex-max",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.2-chat-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.2-codex",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.2-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.3-chat-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.3-codex",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-2026-03-05",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-mini-2026-03-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-nano",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-nano-2026-03-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.4-pro-2026-03-05",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-high-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-low-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-medium-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-5.5-xhigh-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-oss-120b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-oss-20b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-realtime",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-realtime-1.5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/gpt-realtime-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4-0709",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4-1-fast-non-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4-1-fast-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4-fast-non-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4-fast-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-0309-non-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-0309-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-beta-0309-non-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-beta-0309-reasoning",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-multi-agent-0309",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.20-multi-agent-beta-0309",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-4.3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-code-fast-1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-imagine-0.9",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/grok-imagine-video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-a13b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-code",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-functioncall",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-large",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-large-vision",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-lite",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-role",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-standard",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-standard-256K",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250321",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250403",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250521",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250529",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250711",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-20250822",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-vision",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-t1-vision-20250619",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-20250313",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-20250416",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-20250515",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-20250604",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-longtext-128k-20250325",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-vision",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-turbos-vision-20250619",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/hunyuan-vision",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/Hunyuan3D-2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v2-turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v2a",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v3-balanced",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v3-quality",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/ideogram-ai/ideogram-v3-turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2-0711-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2-0905-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2-250905",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2-thinking-turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2.5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kimi-k2.6",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_advanced_lip_sync",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_effects",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_extend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_identify_face",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_lip_sync",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_add",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_clear",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_delete",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_init",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_multi_elements_submit",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_omni_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/kling_virtual_try_on",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/llama-4-maverick",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/llama-4-scout",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_extend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_fast_extend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_fast_nomark",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_fast_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_nomark",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_relax_extend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_relax_nomark",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_relax_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/luma-video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mimo-v2-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mimo-v2-omni",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mimo-v2-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax_files_retrieve",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax_minimax-hailuo-02",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax_video-01",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax-hailuo-02",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax-m2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax-m2.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax-m2.5",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/minimax-m2.7",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_blend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_custom_zoom",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_describe",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_edits",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_high_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_imagine",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_inpaint",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_low_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_modal",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_pan",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_pic_reader",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_prompt_analyzer",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_prompt_analyzer_extended",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_reroll",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_shorten",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_upload",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_upscale",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_upscale_creative",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_upscale_subtle",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_fast_zoom",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_blend",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_custom_zoom",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_describe",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_high_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_imagine",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_inpaint",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_low_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_modal",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_pan",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_pic_reader",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_prompt_analyzer",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_prompt_analyzer_extended",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_reroll",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_shorten",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_upload",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_upscale",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_upscale_creative",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_upscale_subtle",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_variation",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/mj_turbo_zoom",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/nateraw/whisper-large-v3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-2024-12-17",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-mini-2024-09-12",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-pro-2025-03-19",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o1-pro-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-2025-04-16",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-2025-01-31",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-2025-01-31-high",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-2025-01-31-low",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-2025-01-31-medium",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-all",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-high",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-low",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-mini-medium",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o3-pro-2025-06-10",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o4-mini",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/o4-mini-2025-04-16",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/omni-moderation-2024-09-26",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/omni-moderation-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-long",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-max",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-max-2025-01-25",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-max-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-plus-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-turbo",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-turbo-2024-11-01",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-turbo-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-vl-max",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-vl-max-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-vl-ocr",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-vl-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen-vl-plus-latest",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2-1.5b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2-57b-a14b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2-72b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2-7b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2-vl-7b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-14b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-32b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-72b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/Qwen2.5-72B-Instruct-128K",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-7b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-coder-32b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-coder-7b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-math-72b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-omni-7b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-vl-32b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-vl-72b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen2.5-vl-72b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-14b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-235b-a22b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-30b-a3b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-32b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-8b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-coder",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-coder-480b-a35b-instruct",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-coder-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-coder-plus-2025-07-22",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-max",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-max-2026-01-23",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-max-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-vl-235b-a22b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-vl-235b-a22b-thinking",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-vl-32b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3-vl-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-122b-a10b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-27b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-35b-a3b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-397b-a17b",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-flash",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.5-plus-2026-02-15",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.6-max-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/qwen3.6-plus",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/recraft-ai/recraft-v3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/recraft-ai/recraft-v3-svg",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runway_act_one",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runway_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runway_video2video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runwayml_character_performance",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runwayml_control_character",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runwayml_upscale_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/runwayml_video_to_video",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/sora-2",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_beats",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_create_project",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_lyrics_mashup",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_midi",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_mp4",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_phrase",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_stems",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_tags",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_timing",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_vox",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_act_wav",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_concat",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_custom_model",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_feed",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_lyrics",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_music",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_persona_create",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_render",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/suno_uploads",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/upscale_v1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3-fast",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3-fast-frames",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3-frames",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3-pro-frames",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3.1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/veo3.1-pro",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/wan2.5-i2v-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/wan2.5-t2v-preview",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "COMET/whisper-1",
+    "object": "model",
+    "owned_by": "COMET"
+  },
+  {
+    "id": "mistral/mistral-large-latest",
+    "object": "model",
+    "owned_by": "mistral"
+  },
+  {
+    "id": "mistral/codestral-latest",
+    "object": "model",
+    "owned_by": "mistral"
+  },
+  {
+    "id": "mistral/mistral-medium-latest",
+    "object": "model",
+    "owned_by": "mistral"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.2-1b-instruct",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.2-3b-instruct",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.1-8b-instruct-awq",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.1-70b-instruct-fp8-fast",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/moonshotai/kimi-k2.5",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/moonshotai/kimi-k2.6",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/zai-org/glm-4.7-flash",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/qwen/qwq-32b",
+    "object": "model",
+    "owned_by": "cf"
+  },
+  {
+    "id": "cf/@cf/qwen/qwen2.5-coder-32b-instruct",
+    "object": "model",
+    "owned_by": "cf"
+  }
+]

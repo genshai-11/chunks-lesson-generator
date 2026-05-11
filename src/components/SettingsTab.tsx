@@ -4,7 +4,7 @@ import { db, auth } from '../firebase';
 import { AISettings } from '../types';
 import { fetchOpenRouterModels } from '../services/aiService';
 import { generateAudio } from '../services/audioService';
-import { Settings, Save, Loader2, RefreshCw, Key, Globe, Layers, Volume2, Sparkles, Eye, EyeOff, Copy, Mic } from 'lucide-react';
+import { Settings, Save, Loader2, RefreshCw, Key, Globe, Layers, Volume2, Sparkles, Eye, EyeOff, Copy, Mic, Calculator, Scale, Bot, Play } from 'lucide-react';
 
 export default function SettingsTab() {
   const [settings, setSettings] = useState<AISettings>({
@@ -31,16 +31,19 @@ export default function SettingsTab() {
       'Short': 1.5,
       'Medium': 2,
       'Long': 2.5
-    }
+            }
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<any[]>([]);
   const [elevenLabsVoices, setElevenLabsVoices] = useState<any[]>([]);
+  const [nineRouterVoices, setNineRouterVoices] = useState<any[]>([]);
+  const [nineRouterFilterProvider, setNineRouterFilterProvider] = useState<string>('edge-tts');
   const [fetchingVoices, setFetchingVoices] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState(false);
   const [previewText, setPreviewText] = useState('Hello, this is a test of the selected voice.');
+  const [previewLang, setPreviewLang] = useState<'eng' | 'vie'>('eng');
   const [showM2MKey, setShowM2MKey] = useState(false);
 
   const [activeSubTab, setActiveSubTab] = useState<'ai' | 'audio' | 'ohm' | 'api'>('ai');
@@ -75,7 +78,7 @@ export default function SettingsTab() {
               'Short': 1.5,
               'Medium': 2,
               'Long': 2.5
-            };
+            }
           }
           setSettings(data);
         }
@@ -101,6 +104,7 @@ export default function SettingsTab() {
         fallbackModel: settings.fallbackModel,
         sentenceConstraints: settings.sentenceConstraints,
         geminiApiKey: settings.geminiApiKey || null,
+        enableChatbot: !!settings.enableChatbot,
         audioTranscriptModel: settings.audioTranscriptModel || null,
       }, { merge: true });
       alert('AI Configuration saved successfully!');
@@ -117,18 +121,57 @@ export default function SettingsTab() {
     setSaving(true);
     try {
       const docRef = doc(db, `workspaces/default/settings`, 'ai');
-      await setDoc(docRef, {
+      
+      const updateData: any = {
         ttsProvider: settings.ttsProvider || 'elevenlabs',
-        elevenLabsApiKey: settings.elevenLabsApiKey,
-        elevenLabsModel: settings.elevenLabsModel,
-        elevenLabsVoiceId: settings.elevenLabsVoiceId,
-        deepgramApiKey: settings.deepgramApiKey,
-        deepgramModel: settings.deepgramModel,
-      }, { merge: true });
+        elevenLabsApiKey: settings.elevenLabsApiKey ?? null,
+        elevenLabsModel: settings.elevenLabsModel ?? null,
+        elevenLabsVoiceId: settings.elevenLabsVoiceId ?? null,
+        deepgramApiKey: settings.deepgramApiKey ?? null,
+        deepgramModel: settings.deepgramModel ?? null,
+      };
+
+      if (settings.nineRouterUrl !== undefined) updateData.nineRouterUrl = settings.nineRouterUrl ?? null;
+      if (settings.nineRouterApiKey !== undefined) updateData.nineRouterApiKey = settings.nineRouterApiKey ?? null;
+      if (settings.nineRouterEngVoice !== undefined) updateData.nineRouterEngVoice = settings.nineRouterEngVoice ?? null;
+      if (settings.nineRouterVieVoice !== undefined) updateData.nineRouterVieVoice = settings.nineRouterVieVoice ?? null;
+
+      // Remove any remaining undefined values just to be 100% sure
+      Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+      await setDoc(docRef, updateData, { merge: true });
       alert('Audio Configuration saved successfully!');
     } catch (error) {
       console.error('Error saving audio settings:', error);
       alert('Failed to save audio settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveOhm = async () => {
+    if (!auth.currentUser) return;
+    setSaving(true);
+    try {
+      const docRef = doc(db, 'workspaces/default/settings', 'ai');
+      await setDoc(docRef, {
+        formulaType: settings.formulaType || 'sum',
+        complexityMultipliers: settings.complexityMultipliers || {
+          'Very Short': 1,
+          'Short': 1.5,
+          'Medium': 2,
+          'Long': 2.5
+        },
+        dynamicTLTiers: settings.dynamicTLTiers || [
+          { maxCvr: 10, min: 1.0, max: 1.2 },
+          { maxCvr: 20, min: 1.0, max: 1.7 },
+          { maxCvr: 9999, min: 1.4, max: 2.0 }
+        ]
+      }, { merge: true });
+      alert('Ohm Rules Configuration saved successfully!');
+    } catch (error) {
+      console.error('Error saving Ohm Rules settings:', error);
+      alert('Failed to save Ohm Rules settings.');
     } finally {
       setSaving(false);
     }
@@ -214,7 +257,41 @@ export default function SettingsTab() {
     }
   };
 
-  const handlePreviewVoice = async (textToSpeak: string) => {
+  const handleFetch9RouterVoices = async () => {
+    if (!settings.nineRouterUrl) {
+      alert('Please enter a 9Router URL first.');
+      return;
+    }
+    setFetchingVoices(true);
+    try {
+      const providerParam = nineRouterFilterProvider ? `&provider=${nineRouterFilterProvider}` : '';
+      const response = await fetch(`/api/tts/9router/voices?endpoint=${encodeURIComponent(settings.nineRouterUrl)}${providerParam}`, {
+        headers: settings.nineRouterApiKey ? {
+          'Authorization': `Bearer ${settings.nineRouterApiKey}`,
+        } : undefined,
+      });
+      
+      if (!response.ok) {
+        let errMessage = response.statusText;
+        try {
+          const errData = await response.json();
+          if (errData.error) errMessage = errData.error;
+        } catch (e) {}
+        throw new Error(`Failed to fetch 9Router voices: ${errMessage}`);
+      }
+      
+      const data = await response.json();
+      setNineRouterVoices(data.data || []);
+    } catch (error: any) {
+      console.error('Error fetching 9Router voices:', error);
+      const isFailedToFetch = error.message === 'Failed to fetch';
+      alert(`Failed to fetch voices: ${error.message}${isFailedToFetch ? '. This often indicates a CORS missing on the server, an invalid URL, or the server is down.' : ''}`);
+    } finally {
+      setFetchingVoices(false);
+    }
+  };
+
+  const handlePreviewVoice = async (textToSpeak: string, lang: 'eng' | 'vie') => {
     if (settings.ttsProvider === 'elevenlabs' && (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId)) {
       alert('Please configure ElevenLabs API Key and Voice ID first.');
       return;
@@ -223,10 +300,14 @@ export default function SettingsTab() {
       alert('Please configure Deepgram API Key first.');
       return;
     }
+    if (settings.ttsProvider === '9router' && (!settings.nineRouterUrl || (lang === 'eng' ? !settings.nineRouterEngVoice : !settings.nineRouterVieVoice))) {
+      alert(`Please configure 9Router URL and ${lang === 'eng' ? 'English' : 'Vietnamese'} Voice first.`);
+      return;
+    }
     
     setPreviewingVoice(true);
     try {
-      const audioUrl = await generateAudio(textToSpeak, settings);
+      const audioUrl = await generateAudio(textToSpeak, settings, lang);
       if (audioUrl) {
         const audio = new Audio(audioUrl);
         await audio.play();
@@ -452,6 +533,17 @@ export default function SettingsTab() {
                   <p className="mt-1.5 text-[11px] text-gray-400 italic">Default: gemini-2.5-flash</p>
                 </div>
               </div>
+
+              <div className="mt-8 pt-8 border-t border-gray-100">
+                <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                  <Bot className="w-4 h-4 mr-2 text-gray-400" /> AI AI Assistant / Chatbot
+                </h4>
+                <div className="flex items-center space-x-3">
+                  <input type="checkbox" id="enableChatbot" className="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-gray-300" checked={!!settings.enableChatbot} onChange={e => setSettings({...settings, enableChatbot: e.target.checked})} />
+                  <label htmlFor="enableChatbot" className="text-sm font-bold text-gray-700">Enable Floating Chatbot</label>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">Allows a floating AI assistant across all tabs that can generate chunks dynamically via natural language.</p>
+              </div>
             </div>
 
             {/* Sentence Constraints */}
@@ -510,7 +602,106 @@ export default function SettingsTab() {
               </div>
             </div>
 
-          </div>
+          <div className="mt-8 pt-6 border-t border-gray-100">
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                      <div className="flex items-center"><Sparkles className="w-4 h-4 mr-2" /> Dynamic TL Bounds</div>
+                      <button 
+                        onClick={() => {
+                          const current = [...(settings.dynamicTLTiers || [
+                            { maxCvr: 10, min: 1.0, max: 1.2 },
+                            { maxCvr: 20, min: 1.0, max: 1.7 },
+                            { maxCvr: 9999, min: 1.4, max: 2.0 }
+                          ])];
+                          current.push({ maxCvr: 30, min: 1.0, max: 2.0 });
+                          current.sort((a,b) => a.maxCvr - b.maxCvr);
+                          setSettings({ ...settings, dynamicTLTiers: current });
+                        }}
+                        className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors"
+                      >
+                        + Add Tier
+                      </button>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {(settings.dynamicTLTiers || [
+                        { maxCvr: 10, min: 1.0, max: 1.2 },
+                        { maxCvr: 20, min: 1.0, max: 1.7 },
+                        { maxCvr: 9999, min: 1.4, max: 2.0 }
+                      ]).map((tier, idx, arr) => (
+                        <div key={idx} className="p-2 bg-gray-50 rounded-lg border border-gray-100 space-y-1 relative group">
+                          <button 
+                            onClick={() => {
+                              const current = [...(settings.dynamicTLTiers || [
+                                { maxCvr: 10, min: 1.0, max: 1.2 },
+                                { maxCvr: 20, min: 1.0, max: 1.7 },
+                                { maxCvr: 9999, min: 1.4, max: 2.0 }
+                              ])];
+                              current.splice(idx, 1);
+                              setSettings({ ...settings, dynamicTLTiers: current });
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[10px] font-bold z-10 hover:bg-red-200 transition-opacity"
+                            title="Remove tier"
+                          >
+                            ×
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-bold text-gray-500 uppercase">CVR &lt; </span>
+                            <input 
+                              type="number" 
+                              value={tier.maxCvr === 9999 ? '' : tier.maxCvr} 
+                              placeholder="Any"
+                              onChange={(e) => {
+                                const current = [...(settings.dynamicTLTiers || [
+                                  { maxCvr: 10, min: 1.0, max: 1.2 },
+                                  { maxCvr: 20, min: 1.0, max: 1.7 },
+                                  { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                ])];
+                                current[idx].maxCvr = e.target.value ? Number(e.target.value) : 9999;
+                                setSettings({ ...settings, dynamicTLTiers: current });
+                              }}
+                              className="w-16 text-center bg-white border border-gray-200 rounded p-0.5 text-[10px] font-bold focus:ring-0 focus:border-red-500 text-gray-700" 
+                            />
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[8px] text-gray-400 font-bold uppercase block mb-1">Min</label>
+                              <input 
+                                type="number" step="0.1" 
+                                value={tier.min} 
+                                onChange={(e) => {
+                                  const current = [...(settings.dynamicTLTiers || [
+                                    { maxCvr: 10, min: 1.0, max: 1.2 },
+                                    { maxCvr: 20, min: 1.0, max: 1.7 },
+                                    { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                  ])];
+                                  current[idx].min = Number(e.target.value);
+                                  setSettings({ ...settings, dynamicTLTiers: current });
+                                }}
+                                className="w-full text-right bg-transparent border-b border-gray-200 p-1 text-[11px] font-bold focus:ring-0 focus:border-red-500 max-w-[50px] text-red-600" 
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[8px] text-gray-400 font-bold uppercase block mb-1">Max</label>
+                              <input 
+                                type="number" step="0.1" 
+                                value={tier.max} 
+                                onChange={(e) => {
+                                  const current = [...(settings.dynamicTLTiers || [
+                                    { maxCvr: 10, min: 1.0, max: 1.2 },
+                                    { maxCvr: 20, min: 1.0, max: 1.7 },
+                                    { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                  ])];
+                                  current[idx].max = Number(e.target.value);
+                                  setSettings({ ...settings, dynamicTLTiers: current });
+                                }}
+                                className="w-full text-right bg-transparent border-b border-gray-200 p-1 text-[11px] font-bold focus:ring-0 focus:border-red-500 max-w-[50px] text-red-600" 
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div></div>
         )}
 
         {activeSubTab === 'audio' && (
@@ -555,6 +746,17 @@ export default function SettingsTab() {
                     className="text-red-600 focus:ring-red-500"
                   />
                   <span className="text-sm font-medium">Deepgram</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="ttsProvider"
+                    value="9router"
+                    checked={settings.ttsProvider === '9router'}
+                    onChange={() => setSettings({ ...settings, ttsProvider: '9router' })}
+                    className="text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium">9Router</span>
                 </label>
               </div>
             </div>
@@ -670,145 +872,204 @@ export default function SettingsTab() {
             </div>
             )}
 
-            <div className="mt-8 pt-6 border-t border-gray-100">
-              <label className="block text-sm font-bold text-gray-700 mb-4">
-                Voice Preview Settings
-              </label>
-              
-              <div className="flex flex-wrap gap-3 mb-4">
-                <button
-                  onClick={() => handlePreviewVoice("Hello, this is a test of the English voice model.")}
-                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
-                  className="px-4 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 text-sm font-medium rounded-xl hover:bg-blue-100 disabled:opacity-50 transition-colors flex items-center shadow-sm"
-                >
-                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  Preview English
-                </button>
-                <button
-                  onClick={() => handlePreviewVoice("Xin chào, đây là giọng đọc thử nghiệm tiếng Việt.")}
-                  disabled={previewingVoice || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
-                  className="px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 text-sm font-medium rounded-xl hover:bg-green-100 disabled:opacity-50 transition-colors flex items-center shadow-sm"
-                >
-                  {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  Preview Vietnamese
-                </button>
+            {settings.ttsProvider === '9router' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Globe className="w-4 h-4 mr-2 text-gray-400" /> 9Router URL
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.nineRouterUrl || ''}
+                    onChange={(e) => setSettings({ ...settings, nineRouterUrl: e.target.value })}
+                    placeholder="https://api.9router.com"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                    <Key className="w-4 h-4 mr-2 text-gray-400" /> API Key (Optional)
+                  </label>
+                  <input
+                    type="password"
+                    value={settings.nineRouterApiKey || ''}
+                    onChange={(e) => setSettings({ ...settings, nineRouterApiKey: e.target.value })}
+                    placeholder="Enter API Key"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  />
+                </div>
               </div>
-
-              <div className="flex space-x-2">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Layers className="w-4 h-4 mr-2 text-gray-400" /> English Voice Model
+                    </span>
+                    <div className="flex items-center space-x-2">
+                       <select 
+                         value={nineRouterFilterProvider}
+                         onChange={(e) => setNineRouterFilterProvider(e.target.value)}
+                         className="text-xs border border-gray-300 rounded p-1"
+                       >
+                         <option value="">All</option>
+                         <option value="edge-tts">edge-tts</option>
+                         <option value="elevenlabs">elevenlabs</option>
+                         <option value="openai">openai</option>
+                         <option value="deepgram">deepgram</option>
+                         <option value="google-tts">google-tts</option>
+                       </select>
+                       <button
+                         onClick={handleFetch9RouterVoices}
+                         disabled={fetchingVoices || !settings.nineRouterUrl}
+                         className="text-xs flex items-center text-red-600 hover:text-red-700 font-medium disabled:text-gray-400"
+                       >
+                         <RefreshCw className={`w-3 h-3 mr-1 ${fetchingVoices ? 'animate-spin' : ''}`} />
+                         Load
+                       </button>
+                    </div>
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.nineRouterEngVoice || ''}
+                    onChange={(e) => setSettings({ ...settings, nineRouterEngVoice: e.target.value })}
+                    placeholder="e.g., edge-tts/en-US-AriaNeural"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50 mb-3"
+                  />
+                  {nineRouterVoices.length > 0 && (
+                    <select
+                      onChange={(e) => setSettings({ ...settings, nineRouterEngVoice: e.target.value })}
+                      className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                      value={settings.nineRouterEngVoice}
+                    >
+                      <option value="">Select English voice...</option>
+                      {nineRouterVoices.map((v) => (
+                        <option key={v.model} value={v.model}>{v.name || v.model}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center justify-between">
+                    <span className="flex items-center">
+                      <Layers className="w-4 h-4 mr-2 text-gray-400" /> Vietnamese Voice Model
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.nineRouterVieVoice || ''}
+                    onChange={(e) => setSettings({ ...settings, nineRouterVieVoice: e.target.value })}
+                    placeholder="e.g., edge-tts/vi-VN-HoaiMyNeural"
+                    className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50 mb-3"
+                  />
+                  {nineRouterVoices.length > 0 && (
+                    <select
+                      onChange={(e) => setSettings({ ...settings, nineRouterVieVoice: e.target.value })}
+                      className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                      value={settings.nineRouterVieVoice}
+                    >
+                      <option value="">Select Vietnamese voice...</option>
+                      {nineRouterVoices.map((v) => (
+                        <option key={v.model} value={v.model}>{v.name || v.model}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+            )}
+            
+            {/* Test Voice Section */}
+            <div className="mt-8 pt-8 border-t border-gray-100">
+              <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                <Play className="w-4 h-4 mr-2 text-gray-400" /> Test Current Voice Settings
+              </h4>
+              <div className="flex space-x-4">
                 <input
                   type="text"
                   value={previewText}
                   onChange={(e) => setPreviewText(e.target.value)}
-                  placeholder="Custom text to preview..."
-                  className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
+                  className="flex-1 rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                  placeholder="Enter text to preview..."
                 />
+                <select
+                  value={previewLang}
+                  onChange={(e) => setPreviewLang(e.target.value as 'eng' | 'vie')}
+                  className="rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-white"
+                >
+                  <option value="eng">English</option>
+                  <option value="vie">Vietnamese</option>
+                </select>
                 <button
-                  onClick={() => handlePreviewVoice(previewText)}
-                  disabled={previewingVoice || !previewText || (settings.ttsProvider === 'elevenlabs' ? (!settings.elevenLabsApiKey || !settings.elevenLabsVoiceId) : !settings.deepgramApiKey)}
-                  className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 disabled:bg-gray-300 transition-colors flex items-center"
+                  onClick={() => handlePreviewVoice(previewText, previewLang)}
+                  disabled={previewingVoice || !previewText}
+                  className="flex items-center px-6 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold transition-all disabled:opacity-50"
                 >
                   {previewingVoice ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Volume2 className="w-4 h-4 mr-2" />}
-                  Speak
+                  Test Voice
                 </button>
               </div>
             </div>
-
+            
           </div>
         )}
 
         {activeSubTab === 'ohm' && (
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                <Sparkles className="w-6 h-6 mr-2 text-red-600" /> Ohm Configuration
+                <Sparkles className="w-6 h-6 mr-3 text-red-600" /> Ohm Rules Configuration
               </h3>
               <button
-                onClick={async () => {
-                  if (!auth.currentUser) return;
-                  setSaving(true);
-                  try {
-                    const docRef = doc(db, `workspaces/default/settings`, 'ai');
-                    await setDoc(docRef, {
-                      ohmPromptInstructions: settings.ohmPromptInstructions || null,
-                      ohmBaseValues: settings.ohmBaseValues || null,
-                      formulaType: settings.formulaType || 'sum',
-                      complexityMultipliers: settings.complexityMultipliers || {
-                        'Very Short': 1,
-                        'Short': 1.5,
-                        'Medium': 2,
-                        'Long': 2.5
-                      },
-                    }, { merge: true });
-                    alert('Ohm Configuration saved successfully!');
-                  } catch (error) {
-                    console.error('Error saving Ohm settings:', error);
-                    alert('Failed to save Ohm settings.');
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
+                onClick={handleSaveOhm}
                 disabled={saving}
-                className="flex items-center px-6 py-2.5 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-100"
+                className="flex items-center px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 shadow-lg shadow-red-100"
               >
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Ohm Config
+                {saving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-5 h-5 mr-2" />
+                    Save Ohm Rules
+                  </>
+                )}
               </button>
             </div>
 
             <div className="space-y-8">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-bold text-gray-700 flex items-center">
-                    <Layers className="w-4 h-4 mr-2 text-gray-400" /> Custom System Prompt
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const defaultPrompt = `Bạn là một chuyên gia phân tích ngôn ngữ học. Nhiệm vụ của bạn là bóc tách Transcript thành các "Semantic Chunks" (Cụm nghĩa) và phân loại chúng vào 4 tầng năng lượng (Ohm) sau:
-
-1. GREEN (3 Ohm) - Gap Fillers: Những từ/cụm từ "bôi trơn" hội thoại. Bao gồm quán ngữ, từ nối, từ lặp, hoặc các từ đệm không mang nghĩa chính nhưng giúp câu nói tự nhiên (Ví dụ: "thực ra là", "nói chung là", "à thì", "vậy nên").
-
-2. BLUE (5 Ohm) - Sentence Frames: Khung câu hoặc mẫu câu giao tiếp nền tảng. Đây là phần "xương sống" của câu, chứa các cấu trúc ngữ pháp dùng để lắp ghép thông tin (Ví dụ: "Tôi định nói với cậu là...", "Nếu... thì...", "Cậu có bao giờ tự hỏi..."). Lưu ý: Chỉ chọn khung câu chưa hoàn chỉnh, không chọn câu trần thuật đã đầy đủ ý nghĩa.
-
-3. RED (7 Ohm) - Idioms & Nuance: Các cụm từ mang tính biểu cảm cao. Gồm thành ngữ, từ láy, ngôn ngữ hình ảnh, hoặc các cách diễn đạt dân dã, ẩn dụ đặc thù của người bản ngữ (Ví dụ: "chuyện nhỏ như con thỏ", "mật ngọt chết ruồi", "tới số rồi").
-
-4. PINK (9 Ohm) - Key Terms & Concepts: Các từ khóa quan trọng hoặc khái niệm cốt lõi. Gồm danh từ riêng, thuật ngữ chuyên môn, hoặc các đối tượng chính đang được nhắc đến trong đoạn hội thoại (Ví dụ: "trí tuệ nhân tạo", "ví điện tử", "địa lý").`;
-                      if (!settings.ohmPromptInstructions || window.confirm('This will overwrite your custom prompt. Continue?')) {
-                        setSettings(prev => ({ ...prev, ohmPromptInstructions: defaultPrompt }));
-                      }
-                    }}
-                    className="text-xs text-red-600 hover:text-red-700 font-medium"
-                  >
-                    Load Default Template
-                  </button>
-                </div>
-                <textarea
-                  value={settings.ohmPromptInstructions || ''}
-                  onChange={(e) => setSettings({ ...settings, ohmPromptInstructions: e.target.value })}
-                  placeholder="Ex: You are an expert linguistic analyzer..."
-                  className="w-full rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50 min-h-[200px]"
-                />
-              </div>
-              
-              <div className="pt-6 border-t border-gray-100">
-                <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
-                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> Base Ohm (R) Values
+                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
+                  <Calculator className="w-4 h-4 mr-2 text-gray-400" /> Formula Type
                 </label>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {['Green', 'Blue', 'Red', 'Pink'].map((color) => (
-                    <div key={color} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                      <label className={`block text-[10px] font-bold uppercase mb-1 ${color === 'Green' ? 'text-green-700' : color === 'Blue' ? 'text-blue-700' : color === 'Red' ? 'text-red-700' : 'text-pink-700'}`}>{color}</label>
+                <select
+                  value={settings.formulaType || 'sum'}
+                  onChange={(e) => setSettings({ ...settings, formulaType: e.target.value as any })}
+                  className="w-full max-w-xs rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
+                >
+                  <option value="sum">Sum (Characters)</option>
+                  <option value="words">Words</option>
+                </select>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
+                  <Scale className="w-4 h-4 mr-2 text-gray-400" /> Complexity Multipliers
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {('Very Short,Short,Medium,Long'.split(',')).map(len => (
+                    <div key={len}>
+                      <label className="block text-[10px] font-bold uppercase mb-1 text-gray-700">{len}</label>
                       <input
-                        type="number"
-                        value={settings.ohmBaseValues?.[color as keyof typeof settings.ohmBaseValues] ?? (color === 'Green' ? 3 : color === 'Blue' ? 5 : color === 'Red' ? 7 : 9)}
-                        onChange={(e) => setSettings({ 
-                          ...settings, 
-                          ohmBaseValues: { 
-                            ...(settings.ohmBaseValues || { Green: 3, Blue: 5, Red: 7, Pink: 9 }), 
-                            [color]: Number(e.target.value) 
-                          } 
+                        type="number" step="0.1"
+                        value={settings.complexityMultipliers?.[len] ?? 1}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          complexityMultipliers: {
+                            ...(settings.complexityMultipliers || {}),
+                            [len]: Number(e.target.value)
+                          }
                         })}
-                        className="w-full bg-transparent border-none p-0 text-xl font-bold focus:ring-0 text-gray-900"
+                        className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
                       />
                     </div>
                   ))}
@@ -816,57 +1077,105 @@ export default function SettingsTab() {
               </div>
 
               <div className="pt-6 border-t border-gray-100">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
-                      <Sparkles className="w-4 h-4 mr-2 text-gray-400" /> Calculation Formula
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                      <div className="flex items-center"><Sparkles className="w-4 h-4 mr-2" /> Dynamic TL Bounds</div>
+                      <button 
+                        onClick={() => {
+                          const current = [...(settings.dynamicTLTiers || [
+                            { maxCvr: 10, min: 1.0, max: 1.2 },
+                            { maxCvr: 20, min: 1.0, max: 1.7 },
+                            { maxCvr: 9999, min: 1.4, max: 2.0 }
+                          ])];
+                          current.push({ maxCvr: 30, min: 1.0, max: 2.0 });
+                          current.sort((a,b) => a.maxCvr - b.maxCvr);
+                          setSettings({ ...settings, dynamicTLTiers: current });
+                        }}
+                        className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1 rounded transition-colors"
+                      >
+                        + Add Tier
+                      </button>
                     </label>
-                    <div className="flex bg-gray-100 p-1 rounded-xl">
-                      <button
-                        onClick={() => setSettings({ ...settings, formulaType: 'sum' })}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                          settings.formulaType === 'sum' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'
-                        }`}
-                      >
-                        Sum (R1+R2...)
-                      </button>
-                      <button
-                        onClick={() => setSettings({ ...settings, formulaType: 'circuit' })}
-                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                          settings.formulaType === 'circuit' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-500'
-                        }`}
-                      >
-                        Series-Parallel
-                      </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                      {(settings.dynamicTLTiers || [
+                        { maxCvr: 10, min: 1.0, max: 1.2 },
+                        { maxCvr: 20, min: 1.0, max: 1.7 },
+                        { maxCvr: 9999, min: 1.4, max: 2.0 }
+                      ]).map((tier, idx, arr) => (
+                        <div key={idx} className="p-2 bg-gray-50 rounded-lg border border-gray-100 space-y-1 relative group">
+                          <button 
+                            onClick={() => {
+                              const current = [...(settings.dynamicTLTiers || [
+                                { maxCvr: 10, min: 1.0, max: 1.2 },
+                                { maxCvr: 20, min: 1.0, max: 1.7 },
+                                { maxCvr: 9999, min: 1.4, max: 2.0 }
+                              ])];
+                              current.splice(idx, 1);
+                              setSettings({ ...settings, dynamicTLTiers: current });
+                            }}
+                            className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 text-[10px] font-bold z-10 hover:bg-red-200 transition-opacity"
+                            title="Remove tier"
+                          >
+                            ×
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-bold text-gray-500 uppercase">CVR &lt; </span>
+                            <input 
+                              type="number" 
+                              value={tier.maxCvr === 9999 ? '' : tier.maxCvr} 
+                              placeholder="Any"
+                              onChange={(e) => {
+                                const current = [...(settings.dynamicTLTiers || [
+                                  { maxCvr: 10, min: 1.0, max: 1.2 },
+                                  { maxCvr: 20, min: 1.0, max: 1.7 },
+                                  { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                ])];
+                                current[idx].maxCvr = e.target.value ? Number(e.target.value) : 9999;
+                                setSettings({ ...settings, dynamicTLTiers: current });
+                              }}
+                              className="w-16 text-center bg-white border border-gray-200 rounded p-0.5 text-[10px] font-bold focus:ring-0 focus:border-red-500 text-gray-700" 
+                            />
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="text-[8px] text-gray-400 font-bold uppercase block mb-1">Min</label>
+                              <input 
+                                type="number" step="0.1" 
+                                value={tier.min} 
+                                onChange={(e) => {
+                                  const current = [...(settings.dynamicTLTiers || [
+                                    { maxCvr: 10, min: 1.0, max: 1.2 },
+                                    { maxCvr: 20, min: 1.0, max: 1.7 },
+                                    { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                  ])];
+                                  current[idx].min = Number(e.target.value);
+                                  setSettings({ ...settings, dynamicTLTiers: current });
+                                }}
+                                className="w-full text-right bg-transparent border-b border-gray-200 p-1 text-[11px] font-bold focus:ring-0 focus:border-red-500 max-w-[50px] text-red-600" 
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[8px] text-gray-400 font-bold uppercase block mb-1">Max</label>
+                              <input 
+                                type="number" step="0.1" 
+                                value={tier.max} 
+                                onChange={(e) => {
+                                  const current = [...(settings.dynamicTLTiers || [
+                                    { maxCvr: 10, min: 1.0, max: 1.2 },
+                                    { maxCvr: 20, min: 1.0, max: 1.7 },
+                                    { maxCvr: 9999, min: 1.4, max: 2.0 }
+                                  ])];
+                                  current[idx].max = Number(e.target.value);
+                                  setSettings({ ...settings, dynamicTLTiers: current });
+                                }}
+                                className="w-full text-right bg-transparent border-b border-gray-200 p-1 text-[11px] font-bold focus:ring-0 focus:border-red-500 max-w-[50px] text-red-600" 
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center">
-                      <Sparkles className="w-4 h-4 mr-2 text-gray-400" /> Complexity Adjuster
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                    {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => (
-                      <div key={len} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg border border-gray-100">
-                        <span className="text-[9px] font-bold text-gray-500 uppercase">{len}</span>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={settings.complexityMultipliers?.[len] ?? (len === 'Very Short' ? 1 : len === 'Short' ? 1.5 : len === 'Medium' ? 2 : 2.5)}
-                          onChange={(e) => setSettings({
-                            ...settings,
-                            complexityMultipliers: {
-                              ...(settings.complexityMultipliers || { 'Very Short': 1, 'Short': 1.5, 'Medium': 2, 'Long': 2.5 }),
-                              [len]: Number(e.target.value)
-                            }
-                          })}
-                          className="w-12 text-right bg-transparent border-none p-0 text-xs font-bold focus:ring-0 text-red-600"
-                        />
-                      </div>
-                    ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}

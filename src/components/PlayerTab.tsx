@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Chunk } from '../types';
 import { Filter, ChevronLeft, ChevronRight, Volume2, Play, Eye, EyeOff, VideoOff, Video } from 'lucide-react';
@@ -25,13 +25,17 @@ export default function PlayerTab() {
   useEffect(() => {
     if (!auth.currentUser) return;
     const unsubscribe = onSnapshot(
-      collection(db, `workspaces/default/chunks`),
+      query(
+        collection(db, `workspaces/default/chunks`),
+        orderBy('createdAt', 'desc'),
+        limit(200)
+      ),
       (snapshot) => {
         const chunkData: Chunk[] = [];
         snapshot.forEach((doc) => {
           chunkData.push({ id: doc.id, ...doc.data() } as Chunk);
         });
-        setChunks(chunkData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setChunks(chunkData); // Already ordered by query
         setLoading(false);
       },
       (error) => {
@@ -349,7 +353,6 @@ export default function PlayerTab() {
                   <h3 className="text-sm sm:text-base md:text-lg font-normal text-white mb-6 leading-relaxed tracking-normal break-words inline-block">
                     {renderHighlightedSentence(currentChunk.vieSentence, currentChunk.resourcesUsed)}
                   </h3>
-                  {/* Tạm ẩn audio tiếng việt
                   <button 
                     onClick={playVietnamese}
                     className="ml-3 p-2 rounded-full border border-white/10 hover:bg-white/10 text-white/50 hover:text-white transition-all inline-flex items-center align-middle"
@@ -357,7 +360,6 @@ export default function PlayerTab() {
                   >
                     {currentChunk.vieAudioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                   </button>
-                  */}
                 </div>
                 
 

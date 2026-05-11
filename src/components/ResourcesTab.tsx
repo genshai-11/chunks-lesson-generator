@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2, Zap } from 'lucide-react';
@@ -90,7 +90,11 @@ export default function ResourcesTab() {
     if (!auth.currentUser) return;
 
     const unsubscribe = onSnapshot(
-      collection(db, `workspaces/default/resources`),
+      query(
+        collection(db, `workspaces/default/resources`),
+        orderBy('createdAt', 'desc'),
+        limit(500)
+      ),
       (snapshot) => {
         const resData: Resource[] = [];
         snapshot.forEach((doc) => {

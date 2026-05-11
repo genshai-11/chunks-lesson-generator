@@ -7,6 +7,7 @@ import ChunksTab from './ChunksTab';
 import PlayerTab from './PlayerTab';
 import SettingsTab from './SettingsTab';
 import AudioOhmTestTab from './AudioOhmTestTab';
+import Chatbot from './Chatbot';
 
 type TabType = 'resources' | 'mixer' | 'chunks' | 'player' | 'audio' | 'settings';
 
@@ -145,6 +146,7 @@ export default function Dashboard() {
           {activeTab === 'settings' && <SettingsTab />}
         </div>
       </main>
+      <Chatbot />
     </div>
   );
 }

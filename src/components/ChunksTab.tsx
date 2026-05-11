@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, deleteDoc, doc, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc, doc, updateDoc, getDoc, writeBatch, query, orderBy, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Chunk, AISettings } from '../types';
 import { Trash2, Volume2, Play, Loader2, Sparkles, Download, Filter, ChevronDown, ChevronUp, SlidersHorizontal, X } from 'lucide-react';
@@ -15,17 +15,15 @@ export default function ChunksTab() {
 
   // Filter state
   interface FilterState {
-    categories: Set<string>;
-    us: Set<number>;
-    rs: Set<number>;
-    is: Set<number>;
+    difficulties: Set<string>;
+    cvrMin: number;
+    cvrMax: number;
     audio: 'all' | 'hasAudio' | 'noAudio';
   }
   const defaultFilters: FilterState = {
-    categories: new Set(),
-    us: new Set(),
-    rs: new Set(),
-    is: new Set(),
+    difficulties: new Set(),
+    cvrMin: 0,
+    cvrMax: 10000,
     audio: 'all'
   };
   const [pendingFilters, setPendingFilters] = useState<FilterState>(defaultFilters);
@@ -44,14 +42,26 @@ export default function ChunksTab() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const uniqueCategories = React.useMemo(() => Array.from(new Set(chunks.map(c => c.category))).filter(Boolean).sort(), [chunks]);
-  const uniqueUs = React.useMemo(() => (Array.from(new Set(chunks.map(c => Number(c.uTotal)))) as number[]).filter(n => !isNaN(n)).sort((a: number, b: number) => a - b), [chunks]);
-  const uniqueRs = React.useMemo(() => (Array.from(new Set(chunks.map(c => Number(c.rTotal)))) as number[]).filter(n => !isNaN(n)).sort((a: number, b: number) => a - b), [chunks]);
-  const uniqueIs = React.useMemo(() => (Array.from(new Set(chunks.map(c => Number(c.iValue)))) as number[]).filter(n => !isNaN(n)).sort((a: number, b: number) => a - b), [chunks]);
+  const uniqueDifficulties = React.useMemo(() => Array.from(new Set(chunks.map(c => c.difficultyLabel))).filter(Boolean).sort(), [chunks]);
+  
+  const [globalMinCvr, globalMaxCvr] = React.useMemo(() => {
+    const cvrs = chunks.map(c => c.uTotal).filter(n => !isNaN(n));
+    if (cvrs.length === 0) return [0, 1000];
+    return [Math.floor(Math.min(...cvrs)), Math.ceil(Math.max(...cvrs))];
+  }, [chunks]);
+
+  useEffect(() => {
+    if (chunks.length > 0 && defaultFilters.cvrMax === 10000) {
+      const newDefaults = { ...defaultFilters, cvrMin: globalMinCvr, cvrMax: globalMaxCvr };
+      setPendingFilters(prev => prev.cvrMax === 10000 ? newDefaults : prev);
+      setActiveFilters(prev => prev.cvrMax === 10000 ? newDefaults : prev);
+    }
+  }, [globalMinCvr, globalMaxCvr]);
 
   const toggleFilter = (type: keyof FilterState, value: any) => {
     setPendingFilters(prev => {
       if (type === 'audio') return { ...prev, audio: value };
+      if (type === 'cvrMin' || type === 'cvrMax') return { ...prev, [type]: value };
       const newSet = new Set(prev[type] as Set<any>);
       if (newSet.has(value)) newSet.delete(value);
       else newSet.add(value);
@@ -65,8 +75,9 @@ export default function ChunksTab() {
   };
 
   const clearFilters = () => {
-    setPendingFilters(defaultFilters);
-    setActiveFilters(defaultFilters);
+    const resets = { ...defaultFilters, cvrMin: globalMinCvr, cvrMax: globalMaxCvr };
+    setPendingFilters(resets);
+    setActiveFilters(resets);
     setSelectedIds(new Set());
   };
 
@@ -88,13 +99,17 @@ export default function ChunksTab() {
     loadSettings();
 
     const unsubscribe = onSnapshot(
-      collection(db, `workspaces/default/chunks`),
+      query(
+        collection(db, `workspaces/default/chunks`),
+        orderBy('createdAt', 'desc'),
+        limit(150)
+      ),
       (snapshot) => {
         const chunkData: Chunk[] = [];
         snapshot.forEach((doc) => {
           chunkData.push({ id: doc.id, ...doc.data() } as Chunk);
         });
-        setChunks(chunkData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setChunks(chunkData); // Already ordered by query
         setLoading(false);
       },
       (error) => {
@@ -217,8 +232,8 @@ export default function ChunksTab() {
       const currentSettings = await getLatestAiSettings();
       // Generate both English and Vietnamese audio concurrently
       const [engAudioUrl, vieAudioUrl] = await Promise.all([
-        generateAudio(chunk.engSentence, currentSettings),
-        generateAudio(chunk.vieSentence, currentSettings)
+        generateAudio(chunk.engSentence, currentSettings, 'eng'),
+        generateAudio(chunk.vieSentence, currentSettings, 'vie')
       ]);
       
       if (engAudioUrl || vieAudioUrl) {
@@ -239,10 +254,8 @@ export default function ChunksTab() {
 
   const filteredChunks = React.useMemo(() => {
     return chunks.filter(chunk => {
-      if (activeFilters.categories.size > 0 && !activeFilters.categories.has(chunk.category)) return false;
-      if (activeFilters.us.size > 0 && !activeFilters.us.has(chunk.uTotal)) return false;
-      if (activeFilters.rs.size > 0 && !activeFilters.rs.has(chunk.rTotal)) return false;
-      if (activeFilters.is.size > 0 && !activeFilters.is.has(chunk.iValue)) return false;
+      if (activeFilters.difficulties.size > 0 && !activeFilters.difficulties.has(chunk.difficultyLabel)) return false;
+      if (chunk.uTotal < activeFilters.cvrMin || chunk.uTotal > activeFilters.cvrMax) return false;
       if (activeFilters.audio === 'hasAudio' && !chunk.audioUrl) return false;
       if (activeFilters.audio === 'noAudio' && chunk.audioUrl) return false;
       return true;
@@ -267,14 +280,20 @@ export default function ChunksTab() {
     }
   };
 
+  const [bulkAudioType, setBulkAudioType] = useState<'missing' | 'both' | 'eng' | 'vie'>('missing');
+
   const handleBulkGenerateAudio = async () => {
     if (!auth.currentUser || selectedIds.size === 0) return;
     setIsGeneratingBulkAudio(true);
     
-    const chunksToProcess = chunks.filter(c => selectedIds.has(c.id) && (!c.audioUrl || !c.vieAudioUrl));
+    const chunksToProcess = chunks.filter(c => {
+      if (!selectedIds.has(c.id)) return false;
+      if (bulkAudioType === 'missing') return !c.audioUrl || !c.vieAudioUrl;
+      return true;
+    });
     
     if (chunksToProcess.length === 0) {
-      showToast("All selected chunks already have complete audio.");
+      showToast("No chunks required generation based on your selection.");
       setIsGeneratingBulkAudio(false);
       return;
     }
@@ -289,12 +308,16 @@ export default function ChunksTab() {
       setGeneratingAudioId(chunk.id);
       try {
         const updateData: any = {};
-        if (!chunk.audioUrl) {
-          const engAudioUrl = await generateAudio(chunk.engSentence, currentSettings);
+        
+        const shouldGenEng = bulkAudioType === 'both' || bulkAudioType === 'eng' || (bulkAudioType === 'missing' && !chunk.audioUrl);
+        const shouldGenVie = bulkAudioType === 'both' || bulkAudioType === 'vie' || (bulkAudioType === 'missing' && !chunk.vieAudioUrl);
+
+        if (shouldGenEng) {
+          const engAudioUrl = await generateAudio(chunk.engSentence, currentSettings, 'eng');
           if (engAudioUrl) updateData.audioUrl = engAudioUrl;
         }
-        if (!chunk.vieAudioUrl) {
-          const vieAudioUrl = await generateAudio(chunk.vieSentence, currentSettings);
+        if (shouldGenVie) {
+          const vieAudioUrl = await generateAudio(chunk.vieSentence, currentSettings, 'vie');
           if (vieAudioUrl) updateData.vieAudioUrl = vieAudioUrl;
         }
         
@@ -321,7 +344,7 @@ export default function ChunksTab() {
   };
 
   return (
-    <div className="space-y-6 relative">
+    <div className="flex flex-col lg:flex-row items-start gap-6 relative">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -367,7 +390,7 @@ export default function ChunksTab() {
         )}
       </AnimatePresence>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden w-full lg:flex-1">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-bold text-gray-900 tracking-tight">Database</h3>
@@ -391,123 +414,6 @@ export default function ChunksTab() {
           </span>
         </div>
 
-        {/* Filters */}
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              className="overflow-hidden bg-white border-b border-gray-100"
-            >
-              <div className="p-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-6">
-                  {/* Categories */}
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Category</label>
-                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      {uniqueCategories.map(cat => (
-                        <label key={cat} className="flex items-center gap-3 text-sm cursor-pointer group">
-                          <input 
-                            type="checkbox" 
-                            checked={pendingFilters.categories.has(cat)} 
-                            onChange={() => toggleFilter('categories', cat)} 
-                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
-                          />
-                          <span className={`font-medium transition-colors ${pendingFilters.categories.has(cat) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{cat}</span>
-                        </label>
-                      ))}
-                      {uniqueCategories.length === 0 && <span className="text-xs text-gray-400 italic">No categories</span>}
-                    </div>
-                  </div>
-                  {/* U Values */}
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Total Ohm</label>
-                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      {uniqueUs.map(u => (
-                        <label key={u} className="flex items-center gap-3 text-sm cursor-pointer group">
-                          <input 
-                            type="checkbox" 
-                            checked={pendingFilters.us.has(u)} 
-                            onChange={() => toggleFilter('us', u)} 
-                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
-                          />
-                          <span className={`font-medium transition-colors ${pendingFilters.us.has(u) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{u.toFixed(1)}</span>
-                        </label>
-                      ))}
-                      {uniqueUs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
-                    </div>
-                  </div>
-                  {/* R Values */}
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Load (Base)</label>
-                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      {uniqueRs.map(r => (
-                        <label key={r} className="flex items-center gap-3 text-sm cursor-pointer group">
-                          <input 
-                            type="checkbox" 
-                            checked={pendingFilters.rs.has(r)} 
-                            onChange={() => toggleFilter('rs', r)} 
-                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
-                          />
-                          <span className={`font-medium transition-colors ${pendingFilters.rs.has(r) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{r.toFixed(1)}</span>
-                        </label>
-                      ))}
-                      {uniqueRs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
-                    </div>
-                  </div>
-                  {/* I Values */}
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Bias (Multiplier)</label>
-                    <div className="max-h-40 overflow-y-auto space-y-2 border border-gray-100 rounded-xl p-3 bg-gray-50/50">
-                      {uniqueIs.map(i => (
-                        <label key={i} className="flex items-center gap-3 text-sm cursor-pointer group">
-                          <input 
-                            type="checkbox" 
-                            checked={pendingFilters.is.has(i)} 
-                            onChange={() => toggleFilter('is', i)} 
-                            className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500 transition-colors" 
-                          />
-                          <span className={`font-medium transition-colors ${pendingFilters.is.has(i) ? 'text-red-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{i.toFixed(1)}</span>
-                        </label>
-                      ))}
-                      {uniqueIs.length === 0 && <span className="text-xs text-gray-400 italic">No data</span>}
-                    </div>
-                  </div>
-                  {/* Audio Status */}
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Audio Status</label>
-                    <div className="space-y-2">
-                       {['all', 'hasAudio', 'noAudio'].map((option) => (
-                         <button
-                           key={option}
-                           onClick={() => toggleFilter('audio', option as any)}
-                           className={`w-full text-left px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-                             pendingFilters.audio === option 
-                             ? 'bg-red-50 border-red-200 text-red-700 shadow-sm' 
-                             : 'bg-white border-gray-200 text-gray-500 hover:border-red-200'
-                           }`}
-                         >
-                           {option === 'all' ? 'Show All' : option === 'hasAudio' ? 'Has Audio File' : 'No Audio File'}
-                         </button>
-                       ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
-                  <button onClick={clearFilters} className="px-6 py-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-600 transition-colors">
-                    Reset
-                  </button>
-                  <button onClick={() => { applyFilters(); setShowFilters(false); }} className="px-8 py-2 text-xs font-black uppercase tracking-widest text-white bg-red-600 rounded-xl hover:bg-red-700 shadow-lg shadow-red-100 transition-all active:scale-95">
-                    Apply Pulse
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Bulk Actions */}
         {selectedIds.size > 0 && (
           <div className="bg-blue-50 px-6 py-3 flex items-center justify-between border-b border-blue-100">
@@ -515,14 +421,31 @@ export default function ChunksTab() {
               {selectedIds.size} items selected
             </span>
             <div className="flex gap-2">
-              <button
-                onClick={handleBulkGenerateAudio}
-                disabled={isGeneratingBulkAudio || isDeletingBulk}
-                className="flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {isGeneratingBulkAudio ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Generate Audio
-              </button>
+              <div className="flex items-center bg-blue-600 rounded">
+                <select
+                  value={bulkAudioType}
+                  onChange={(e) => setBulkAudioType(e.target.value as any)}
+                  className="bg-transparent text-white text-sm font-medium py-1.5 pl-3 pr-8 border-none focus:ring-0 appearance-none cursor-pointer hover:bg-blue-700 transition-colors rounded-l border-r border-blue-500"
+                  disabled={isGeneratingBulkAudio || isDeletingBulk}
+                >
+                  <option value="missing" className="text-gray-900 bg-white">Missing Audio</option>
+                  <option value="both" className="text-gray-900 bg-white">All (EN & VI)</option>
+                  <option value="eng" className="text-gray-900 bg-white">English Only</option>
+                  <option value="vie" className="text-gray-900 bg-white">Vietnamese Only</option>
+                </select>
+                <div className="pointer-events-none -ml-6 mr-2 text-white/70">
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+                <button
+                  onClick={handleBulkGenerateAudio}
+                  disabled={isGeneratingBulkAudio || isDeletingBulk}
+                  className="flex items-center px-3 py-1.5 text-white text-sm font-medium rounded-r hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  title="Generate based on selection"
+                >
+                  {isGeneratingBulkAudio ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                  Generate
+                </button>
+              </div>
               <button
                 onClick={handleBulkExport}
                 disabled={isGeneratingBulkAudio || isDeletingBulk}
@@ -663,6 +586,92 @@ export default function ChunksTab() {
           </div>
         )}
       </div>
+
+       {/* Sidebar Filters */}
+       <AnimatePresence>
+          {showFilters && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="shrink-0"
+            >
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-6 w-80">
+                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                  <h3 className="text-sm font-bold text-gray-900 tracking-tight uppercase">Filters</h3>
+                  <button onClick={() => setShowFilters(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                
+                <div className="p-5 space-y-6 max-h-[calc(100vh-120px)] overflow-y-auto">
+                  {/* CVR (Total Ohm) */}
+                  <div>
+                    <label className="flex justify-between items-center text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                      <span>CVR (Total Ohm)</span>
+                      <span className="text-red-600 font-bold">{pendingFilters.cvrMin} - {pendingFilters.cvrMax}</span>
+                    </label>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Min Limit</label>
+                        <input
+                          type="range"
+                          min={globalMinCvr}
+                          max={globalMaxCvr}
+                          value={pendingFilters.cvrMin}
+                          onChange={(e) => toggleFilter('cvrMin', parseInt(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Max Limit</label>
+                        <input
+                          type="range"
+                          min={globalMinCvr}
+                          max={globalMaxCvr}
+                          value={pendingFilters.cvrMax}
+                          onChange={(e) => toggleFilter('cvrMax', parseInt(e.target.value))}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Audio Status */}
+                  <div className="border-t border-gray-100 pt-5">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Audio Status</label>
+                    <div className="space-y-2">
+                       {['all', 'hasAudio', 'noAudio'].map((option) => (
+                         <button
+                           key={option}
+                           onClick={() => toggleFilter('audio', option as any)}
+                           className={`w-full text-left px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                             pendingFilters.audio === option 
+                             ? 'bg-red-50 border-red-200 text-red-700 shadow-sm' 
+                             : 'bg-white border-gray-200 text-gray-500 hover:border-red-200'
+                           }`}
+                         >
+                           {option === 'all' ? 'Show All' : option === 'hasAudio' ? 'Has Audio File' : 'No Audio File'}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-gray-100 bg-gray-50 flex gap-3">
+                  <button onClick={clearFilters} className="flex-1 py-2 text-xs font-black uppercase tracking-widest text-gray-500 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl transition-colors">
+                    Reset
+                  </button>
+                  <button onClick={() => applyFilters()} className="flex-1 py-2 text-xs font-black uppercase tracking-widest text-white bg-red-600 rounded-xl hover:bg-red-700 shadow-lg shadow-red-100 transition-all active:scale-95">
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+       </AnimatePresence>
+
     </div>
   );
 }

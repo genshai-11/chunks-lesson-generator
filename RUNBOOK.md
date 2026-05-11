@@ -1,6 +1,8 @@
 # Operations Runbook - Semantic Chunk Analyzer
 
-Tài liệu này cung cấp hướng dẫn vận hành, quản trị và xử lý sự cố cho hệ thống Semantic Chunk Analyzer.
+Tài liệu này cung cấp hướng dẫn vận hành, quản trị và xử lý sự cố cho hệ thống Semantic Chunk Analyzer. 
+Để theo dõi và hiểu chi tiết về ngôn ngữ thiết kế chung (Ubiquitous Language) bao gồm các khái niệm định tuyến theo Domain-Driven Design (DDD) như CVR, Ohm, Topic Level (TL), và Complexity, vui lòng xem tài liệu liên kết sau:
+👉 [**Shared Understanding & DDD**](./docs/share-understanding.md)
 
 ## 1. Tổng quan kiến trúc (High-Level Architecture)
 

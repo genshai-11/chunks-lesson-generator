@@ -207,10 +207,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
             'Content-Type': 'application/json',
             'Authorization': authHeader
           },
-          body: JSON.stringify({
-            model: settings.primaryModel,
-            messages: [{ role: 'user', content: prompt }]
-          })
+          body: JSON.stringify({ model: settings.primaryModel, stream: false, messages: [{ role: 'user', content: prompt }] })
         });
         
         if (!res.ok) {
@@ -222,10 +219,8 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
           responseText = data.choices[0].message.content;
         } else if (data.response) {
           responseText = data.response;
-        } else if (data.content && Array.isArray(data.content)) {
-          responseText = data.content[0].text;
-        } else {
-          throw new Error('Unexpected API format');
+        } else if (data.content && Array.isArray(data.content)) { responseText = data.content[0].text; } else if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) { responseText = data.candidates[0].content.parts[0].text; } else {
+          throw new Error('Unexpected API format: ' + JSON.stringify(data).substring(0, 100));
         }
       } else {
         const { GoogleGenAI } = await import('@google/genai');
@@ -316,6 +311,132 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     }
   });
 
+  // Proxy for 9Router Voices
+  app.get('/api/tts/9router/voices', async (req, res) => {
+    let endpoint = req.query.endpoint as string;
+    const provider = req.query.provider as string;
+    const apiKey = req.headers.authorization;
+
+    console.log('[PROXY VOICES] endpoint:', endpoint, 'provider:', provider, 'apiKey:', apiKey);
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Endpoint URL is required' });
+    }
+
+    endpoint = endpoint.trim().replace(/\/+$/, '');
+    if (endpoint.endsWith('/v1')) {
+      endpoint = endpoint.slice(0, -3);
+    }
+    if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+      endpoint = 'https://' + endpoint;
+    }
+
+    const targetUrl = `${endpoint}/v1/audio/voices${provider ? `?provider=${provider}` : ''}`;
+
+    try {
+      let response = await fetch(targetUrl, {
+        method: 'GET',
+        headers: apiKey ? { 'Authorization': apiKey } : {}
+      });
+
+      let usedFallback = false;
+
+      if (!response.ok) {
+        // Fallback to /v1/models/tts
+        let fallbackUrl = `${endpoint}/v1/models/tts`;
+        let fbResponse = await fetch(fallbackUrl, {
+          method: 'GET',
+          headers: apiKey ? { 'Authorization': apiKey } : {}
+        });
+        
+        if (fbResponse.ok) {
+           response = fbResponse;
+           usedFallback = true;
+        } else {
+           // Fallback to /v1/models
+           fallbackUrl = `${endpoint}/v1/models`;
+           fbResponse = await fetch(fallbackUrl, {
+             method: 'GET',
+             headers: apiKey ? { 'Authorization': apiKey } : {}
+           });
+           
+           if (fbResponse.ok) {
+             response = fbResponse;
+             usedFallback = true;
+           }
+        }
+      }
+
+      const status = response.status;
+      if (!response.ok) {
+        return res.status(status).json({ error: response.statusText || await response.text() });
+      }
+
+      const data = await response.json();
+      
+      // Adapt the models array to our voice expected format if the fallback was used
+      if (usedFallback && data.data && Array.isArray(data.data)) {
+        data.data = data.data.map((m: any) => ({
+          model: m.id || m.model || '',
+          name: m.name || m.id || m.model || 'Default Voice',
+          provider: m.provider || (m.id && m.id.includes('/') ? m.id.split('/')[0] : 'unknown')
+        }));
+      }
+
+      res.json(data);
+    } catch (error: any) {
+      console.error(`Proxy Voices Error for URL ${targetUrl}:`, error);
+      res.status(502).json({ error: error.message || 'Failed to fetch voices via proxy' });
+    }
+  });
+
+  // Proxy for 9Router Speech
+  app.post('/api/tts/9router/speech', async (req, res) => {
+    const apiKey = req.headers.authorization;
+    let { endpoint, model, input } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Endpoint URL is required' });
+    }
+
+    endpoint = endpoint.trim().replace(/\/+$/, '');
+    if (endpoint.endsWith('/v1')) {
+      endpoint = endpoint.slice(0, -3);
+    }
+    if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
+      endpoint = 'https://' + endpoint;
+    }
+
+    const targetUrl = `${endpoint}/v1/audio/speech`;
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { 'Authorization': apiKey } : {})
+        },
+        body: JSON.stringify({ model, input })
+      });
+
+      if (!response.ok) {
+        let errMessage = response.statusText;
+        try {
+          const errData = await response.text();
+          if (errData) errMessage = errData;
+        } catch(e) {}
+        return res.status(response.status).json({ error: errMessage });
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const base64Audio = buffer.toString('base64');
+      res.json({ audioContent: base64Audio });
+    } catch (error: any) {
+      console.error(`Proxy Speech Error for URL ${targetUrl}:`, error);
+      res.status(502).json({ error: error.message || 'Failed to generate speech via proxy' });
+    }
+  });
+
   // Proxy for OpenRouter Models
   app.get('/api/ai/models', async (req, res) => {
     const apiKey = req.headers.authorization;
@@ -382,6 +503,31 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
       }
       
       res.status(502).json({ error: errorMessage, target: targetUrl });
+    }
+  });
+
+  // Chatbot direct Gemini endpoint
+  app.post('/api/chatbot', async (req, res) => {
+    const { prompt } = req.body;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+      });
+
+      const text = response.text || '';
+      res.json({ text });
+    } catch (error: any) {
+      console.error('Chatbot Gemini Error:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 

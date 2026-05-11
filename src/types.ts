@@ -38,9 +38,10 @@ export interface Chunk {
 
 export type FormulaType = 'sum' | 'circuit';
 
-export type TTSProvider = 'elevenlabs' | 'deepgram';
+export type TTSProvider = 'elevenlabs' | 'deepgram' | '9router';
 
 export interface AISettings {
+  enableChatbot?: boolean;
   endpoint: string;
   apiKey: string;
   primaryModel: string;
@@ -51,6 +52,10 @@ export interface AISettings {
   elevenLabsVoiceId?: string;
   deepgramApiKey?: string;
   deepgramModel?: string;
+  nineRouterUrl?: string;
+  nineRouterApiKey?: string;
+  nineRouterEngVoice?: string;
+  nineRouterVieVoice?: string;
   ohmPromptInstructions?: string;
   formulaType?: FormulaType;
   complexityMultipliers?: Record<SentenceLength, number>;
@@ -64,4 +69,5 @@ export interface AISettings {
   sentenceConstraints?: Record<SentenceLength, SentenceConstraint>;
   geminiApiKey?: string;
   audioTranscriptModel?: string;
+  dynamicTLTiers?: { maxCvr: number; min: number; max: number }[];
 }
