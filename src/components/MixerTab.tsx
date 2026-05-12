@@ -129,7 +129,7 @@ export default function MixerTab() {
     if (!auth.currentUser) return;
 
     const unsubscribe = onSnapshot(
-      query(collection(db, `workspaces/default/resources`), limit(500)),
+      query(collection(db, `workspaces/default/resources`), limit(100)),
       (snapshot) => {
         const resData: Resource[] = [];
         snapshot.forEach((doc) => {

@@ -92,8 +92,11 @@ export default function ChunksTab() {
         if (docSnap.exists()) {
           setAiSettings(docSnap.data() as AISettings);
         }
-      } catch (error) {
-        console.error('Error loading AI settings:', error);
+      } catch (e: any) {
+        const msg = e?.message?.toLowerCase() || '';
+        if (!msg.includes('quota exceeded') && !msg.includes('resource-exhausted')) {
+          console.error("Error loading AI settings:", e);
+        }
       }
     };
     loadSettings();
@@ -102,7 +105,7 @@ export default function ChunksTab() {
       query(
         collection(db, `workspaces/default/chunks`),
         orderBy('createdAt', 'desc'),
-        limit(150)
+        limit(100)
       ),
       (snapshot) => {
         const chunkData: Chunk[] = [];

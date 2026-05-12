@@ -28,7 +28,7 @@ export default function PlayerTab() {
       query(
         collection(db, `workspaces/default/chunks`),
         orderBy('createdAt', 'desc'),
-        limit(200)
+        limit(100)
       ),
       (snapshot) => {
         const chunkData: Chunk[] = [];

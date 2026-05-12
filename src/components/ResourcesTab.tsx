@@ -60,8 +60,12 @@ export default function ResourcesTab() {
         if (snap.exists()) {
           setBaseOhms(prev => ({ ...prev, ...(snap.data() as Record<ColorCategory, number>) }));
         }
-      } catch (e) {
-        console.error("Failed to load base ohms settings", e);
+      } catch (e: any) {
+        // Silently skip if it's a quota error as it's already handled globally
+        const msg = e?.message?.toLowerCase() || '';
+        if (!msg.includes('quota exceeded') && !msg.includes('resource-exhausted')) {
+          console.error("Failed to load base ohms settings", e);
+        }
       }
     };
     loadOhms();
@@ -93,7 +97,7 @@ export default function ResourcesTab() {
       query(
         collection(db, `workspaces/default/resources`),
         orderBy('createdAt', 'desc'),
-        limit(500)
+        limit(100)
       ),
       (snapshot) => {
         const resData: Resource[] = [];
