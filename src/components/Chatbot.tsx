@@ -11,37 +11,14 @@ interface Message {
   content: string;
 }
 
-export default function Chatbot() {
+export default function Chatbot({ resources, aiSettings }: { resources: Resource[], aiSettings?: AISettings }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [settings, setSettings] = useState<AISettings | null>(null);
-  const [resources, setResources] = useState<Resource[]>([]);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'assistant', content: 'Chào bạn! Mình có thể giúp tạo các chunk học tập. Vd: "Tạo 10 câu 5 ohm chủ đề giáo dục"' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const unsubSettings = onSnapshot(doc(db, `workspaces/default/settings`, 'ai'), (doc) => {
-      if (doc.exists()) {
-        setSettings(doc.data() as AISettings);
-      } else {
-        setSettings({ enableChatbot: true } as AISettings);
-      }
-    });
-
-    const unsubResources = onSnapshot(query(collection(db, `workspaces/default/resources`), limit(100)), (snapshot) => {
-      const res: Resource[] = [];
-      snapshot.forEach(d => res.push({ id: d.id, ...d.data() } as Resource));
-      setResources(res);
-    });
-
-    return () => {
-      unsubSettings();
-      unsubResources();
-    };
-  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,7 +30,7 @@ export default function Chatbot() {
     }
   }, [messages, isOpen]);
 
-  if (settings && settings.enableChatbot === false) return null; // Default to true if undefined
+  if (aiSettings && aiSettings.enableChatbot === false) return null; // Default to true if undefined
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +43,7 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      if (!settings.apiKey && !settings.geminiApiKey) {
+      if (!aiSettings?.apiKey && !aiSettings?.geminiApiKey) {
          throw new Error('API key is missing in AI Settings.');
       }
 
@@ -90,11 +67,11 @@ User: ${userMessage}`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.apiKey || settings.geminiApiKey || 'default'}`,
+          'Authorization': `Bearer ${aiSettings.apiKey || aiSettings.geminiApiKey || 'default'}`,
         },
         body: JSON.stringify({
-          endpoint: settings.endpoint || 'https://openrouter.ai/api/v1',
-          model: settings.primaryModel || 'google/gemini-2.5-flash',
+          endpoint: aiSettings.endpoint || 'https://openrouter.ai/api/v1',
+          model: aiSettings.primaryModel || 'google/gemini-2.5-flash',
           stream: false,
           messages: [{ role: 'user', content: prompt }]
         })
@@ -142,7 +119,7 @@ User: ${userMessage}`;
           sentenceLength: 'Medium',
           colorPreferences: [],
           availableResources: resources,
-          settings
+          settings: aiSettings!
         });
 
         let successCount = 0;

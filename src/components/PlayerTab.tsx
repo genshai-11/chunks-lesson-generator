@@ -5,10 +5,7 @@ import { Chunk } from '../types';
 import { Filter, ChevronLeft, ChevronRight, Volume2, Play, Eye, EyeOff, VideoOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-export default function PlayerTab() {
-  const [chunks, setChunks] = useState<Chunk[]>([]);
-  const [loading, setLoading] = useState(true);
-  
+export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loading: boolean }) {
   // Filters
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedRs, setSelectedRs] = useState<Set<number>>(new Set());
@@ -21,30 +18,6 @@ export default function PlayerTab() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, `workspaces/default/chunks`),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      ),
-      (snapshot) => {
-        const chunkData: Chunk[] = [];
-        snapshot.forEach((doc) => {
-          chunkData.push({ id: doc.id, ...doc.data() } as Chunk);
-        });
-        setChunks(chunkData); // Already ordered by query
-        setLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `workspaces/default/chunks`);
-        setLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
 
   // Extract all unique categories
   const uniqueCategories = useMemo(() => Array.from(new Set(chunks.map(c => c.category))).filter(Boolean).sort(), [chunks]);

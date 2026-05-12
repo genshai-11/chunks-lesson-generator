@@ -7,10 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { generateAudio } from '../services/audioService';
 import Papa from 'papaparse';
 
-export default function ChunksTab() {
-  const [chunks, setChunks] = useState<Chunk[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [aiSettings, setAiSettings] = useState<AISettings | undefined>();
+export default function ChunksTab({ chunks, loading, aiSettings }: { chunks: Chunk[], loading: boolean, aiSettings?: AISettings }) {
   const [generatingAudioId, setGeneratingAudioId] = useState<string | null>(null);
 
   // Filter state
@@ -80,49 +77,6 @@ export default function ChunksTab() {
     setActiveFilters(resets);
     setSelectedIds(new Set());
   };
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    // Load AI Settings for audio generation
-    const loadSettings = async () => {
-      try {
-        const docRef = doc(db, `workspaces/default/settings`, 'ai');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setAiSettings(docSnap.data() as AISettings);
-        }
-      } catch (e: any) {
-        const msg = e?.message?.toLowerCase() || '';
-        if (!msg.includes('quota exceeded') && !msg.includes('resource-exhausted')) {
-          console.error("Error loading AI settings:", e);
-        }
-      }
-    };
-    loadSettings();
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, `workspaces/default/chunks`),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      ),
-      (snapshot) => {
-        const chunkData: Chunk[] = [];
-        snapshot.forEach((doc) => {
-          chunkData.push({ id: doc.id, ...doc.data() } as Chunk);
-        });
-        setChunks(chunkData); // Already ordered by query
-        setLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `workspaces/default/chunks`);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
 
   const handleDelete = async (id: string) => {
     if (!auth.currentUser) return;

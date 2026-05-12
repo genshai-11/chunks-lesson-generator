@@ -90,10 +90,7 @@ const TOPIC_PRESETS = [
   { label: '📖 Literature & Poetry', value: 'Literature', tl: 2.0 },
 ];
 
-export default function MixerTab() {
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [aiSettings, setAiSettings] = useState<AISettings | undefined>();
-  
+export default function MixerTab({ resources, aiSettings }: { resources: Resource[], aiSettings?: AISettings }) {
   // Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -124,42 +121,6 @@ export default function MixerTab() {
   const [saving, setSaving] = useState(false);
   const [savingIndex, setSavingIndex] = useState<number | null>(null);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const unsubscribe = onSnapshot(
-      query(collection(db, `workspaces/default/resources`), limit(100)),
-      (snapshot) => {
-        const resData: Resource[] = [];
-        snapshot.forEach((doc) => {
-          resData.push({ id: doc.id, ...doc.data() } as Resource);
-        });
-        setResources(resData);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `workspaces/default/resources`);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-    const loadSettings = async () => {
-      try {
-        const docRef = doc(db, `workspaces/default/settings`, 'ai');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setAiSettings(docSnap.data() as AISettings);
-        }
-      } catch (error) {
-        console.error('Error loading AI settings:', error);
-      }
-    };
-    loadSettings();
-  }, []);
 
   const handleRegenerate = async (index: number) => {
     const chunk = draftChunks[index];

@@ -8,13 +8,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { rawNuanceData } from '../data/nuanceData';
 import { generateChunk } from '../services/aiService';
 
-export default function ResourcesTab() {
-  const [resources, setResources] = useState<Resource[]>([]);
+export default function ResourcesTab({ resources, loading }: { resources: Resource[], loading: boolean }) {
   const [name, setName] = useState('');
   const [hint, setHint] = useState('');
   const [color, setColor] = useState<ColorCategory>('Green');
   const [ohm, setOhm] = useState<number | ''>('');
-  const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [generatingPulse, setGeneratingPulse] = useState(false);
   const [showPulseModal, setShowPulseModal] = useState(false);
@@ -39,6 +37,7 @@ export default function ResourcesTab() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
 
   const [baseOhms, setBaseOhms] = useState<Partial<Record<ColorCategory, number>>>({
     Green: 3, Blue: 5, Red: 7, Pink: 9
@@ -89,32 +88,6 @@ export default function ResourcesTab() {
   useEffect(() => {
     setOhm(baseOhms[color] || '');
   }, [color, baseOhms]);
-
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const unsubscribe = onSnapshot(
-      query(
-        collection(db, `workspaces/default/resources`),
-        orderBy('createdAt', 'desc'),
-        limit(100)
-      ),
-      (snapshot) => {
-        const resData: Resource[] = [];
-        snapshot.forEach((doc) => {
-          resData.push({ id: doc.id, ...doc.data() } as Resource);
-        });
-        setResources(resData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        setLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `workspaces/default/resources`);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
 
   const duplicateIds = React.useMemo(() => {
     const seen = new Map<string, string>();
@@ -259,7 +232,7 @@ export default function ResourcesTab() {
       message: `Are you sure you want to delete ${selectedIds.size} selected resources?`,
       onConfirm: async () => {
         setConfirmModal(null);
-        setLoading(true);
+        setProcessing(true);
         try {
           const batchSize = 400;
           let count = 0;
@@ -285,7 +258,7 @@ export default function ResourcesTab() {
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
         } finally {
-          setLoading(false);
+          setProcessing(false);
         }
       }
     });
@@ -294,7 +267,7 @@ export default function ResourcesTab() {
   const handleClearAll = async () => {
     if (!auth.currentUser || resources.length === 0) return;
     
-    setLoading(true);
+    setProcessing(true);
     try {
       const batchSize = 400;
       let count = 0;
@@ -318,14 +291,14 @@ export default function ResourcesTab() {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
   const handleBulkChangeCategory = async (newColor: ColorCategory) => {
     if (!auth.currentUser || selectedIds.size === 0) return;
     
-    setLoading(true);
+    setProcessing(true);
     try {
       const batch = writeBatch(db);
       selectedIds.forEach(id => {
@@ -337,7 +310,7 @@ export default function ResourcesTab() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
@@ -360,7 +333,7 @@ export default function ResourcesTab() {
       return;
     }
 
-    setLoading(true);
+    setProcessing(true);
     try {
       const batchSize = 400;
       let count = 0;
@@ -384,7 +357,7 @@ export default function ResourcesTab() {
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
@@ -396,7 +369,7 @@ export default function ResourcesTab() {
       message: `Are you sure you want to update all existing resources to match the configured Base Ohm values?`,
       onConfirm: async () => {
         setConfirmModal(null);
-        setLoading(true);
+        setProcessing(true);
         try {
           const batchSize = 400;
           let count = 0;
@@ -427,7 +400,7 @@ export default function ResourcesTab() {
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
         } finally {
-          setLoading(false);
+          setProcessing(false);
         }
       }
     });

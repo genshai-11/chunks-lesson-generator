@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { logOut, auth } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { logOut, auth, handleFirestoreError, OperationType } from '../firebase';
+import { collection, onSnapshot, query, orderBy, limit, doc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { Resource, Chunk, AISettings } from '../types';
 import { LogOut, Database, Wand2, ListMusic, Settings as SettingsIcon, Mic, User, PanelLeftClose, PanelLeftOpen, PlayCircle, Blocks } from 'lucide-react';
 import ResourcesTab from './ResourcesTab';
 import MixerTab from './MixerTab';
@@ -14,6 +17,56 @@ type TabType = 'resources' | 'mixer' | 'chunks' | 'player' | 'audio' | 'settings
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('resources');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // Lifted State
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [chunks, setChunks] = useState<Chunk[]>([]);
+  const [aiSettings, setAiSettings] = useState<AISettings | undefined>();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    // Listen to Resources
+    const unsubResources = onSnapshot(
+      query(collection(db, `workspaces/default/resources`), orderBy('createdAt', 'desc'), limit(100)),
+      (snapshot) => {
+        const resData: Resource[] = [];
+        snapshot.forEach((doc) => resData.push({ id: doc.id, ...doc.data() } as Resource));
+        setResources(resData);
+        setLoading(false);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, `workspaces/default/resources`)
+    );
+
+    // Listen to Chunks
+    const unsubChunks = onSnapshot(
+      query(collection(db, `workspaces/default/chunks`), orderBy('createdAt', 'desc'), limit(100)),
+      (snapshot) => {
+        const chunkData: Chunk[] = [];
+        snapshot.forEach((doc) => chunkData.push({ id: doc.id, ...doc.data() } as Chunk));
+        setChunks(chunkData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, `workspaces/default/chunks`)
+    );
+
+    // Listen to AI Settings
+    const unsubSettings = onSnapshot(
+      doc(db, `workspaces/default/settings`, 'ai'),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setAiSettings(snapshot.data() as AISettings);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, `workspaces/default/settings/ai`)
+    );
+
+    return () => {
+      unsubResources();
+      unsubChunks();
+      unsubSettings();
+    };
+  }, []);
 
   const tabs = [
     { id: 'resources', label: 'Resources', icon: Database },
@@ -138,15 +191,15 @@ export default function Dashboard() {
       {/* MAIN CONTENT */}
       <main className={`flex-1 transition-all duration-300 ease-in-out pb-20 md:pb-0 min-h-screen ${isCollapsed ? 'md:ml-20' : 'md:ml-64'}`}>
         <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-300">
-          {activeTab === 'resources' && <ResourcesTab />}
-          {activeTab === 'mixer' && <MixerTab />}
-          {activeTab === 'chunks' && <ChunksTab />}
-          {activeTab === 'player' && <PlayerTab />}
+          {activeTab === 'resources' && <ResourcesTab resources={resources} loading={loading} />}
+          {activeTab === 'mixer' && <MixerTab resources={resources} aiSettings={aiSettings} />}
+          {activeTab === 'chunks' && <ChunksTab chunks={chunks} loading={loading} aiSettings={aiSettings} />}
+          {activeTab === 'player' && <PlayerTab chunks={chunks} loading={loading} />}
           {activeTab === 'audio' && <AudioOhmTestTab />}
           {activeTab === 'settings' && <SettingsTab />}
         </div>
       </main>
-      <Chatbot />
+      <Chatbot resources={resources} aiSettings={aiSettings} />
     </div>
   );
 }
