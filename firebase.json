@@ -9,14 +9,6 @@
     ],
     "rewrites": [
       {
-        "source": "/api{,/**}",
-        "run": {
-          "serviceId": "chunks-generator-api",
-          "region": "asia-southeast1",
-          "pinTag": true
-        }
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }

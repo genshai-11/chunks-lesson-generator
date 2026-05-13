@@ -1,4 +1,25 @@
+import { GoogleGenAI } from '@google/genai';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
+
+function getGeminiClient(settings?: AISettings) {
+  const key = settings?.geminiApiKey;
+  if (!key) {
+    throw new Error('Gemini API key is missing in AI Settings.');
+  }
+  return new GoogleGenAI({ apiKey: key });
+}
+
+function normalizeEndpoint(endpoint?: string): string {
+  if (!endpoint || endpoint.trim() === '') {
+    return 'https://openrouter.ai/api/v1';
+  }
+
+  let normalized = endpoint.trim();
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `https://${normalized}`;
+  }
+  return normalized.replace(/\/+$/, '');
+}
 
 export interface GenerateChunkParams {
   resources: Resource[];
@@ -64,24 +85,21 @@ export async function transcribeAudio(audioBlob: Blob, settings?: AISettings): P
     reader.readAsDataURL(audioBlob);
   });
 
-  const response = await fetch('/api/transcribe', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      audioData: base64Audio,
-      mimeType: audioBlob.type || 'audio/webm',
-      model: settings?.audioTranscriptModel || 'gemini-2.5-flash',
-    }),
+  const aiClient = getGeminiClient(settings);
+  const response = await aiClient.models.generateContent({
+    model: settings?.audioTranscriptModel || 'gemini-2.5-flash',
+    contents: [
+      {
+        inlineData: {
+          mimeType: audioBlob.type || 'audio/webm',
+          data: base64Audio,
+        },
+      },
+      'Please transcribe this audio. Return ONLY the transcript text in the language spoken, with no other commentary, quotes, or formatting.',
+    ],
   });
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || data.message || `Transcription failed: ${response.status}`);
-  }
-
-  return typeof data.transcript === 'string' ? data.transcript.trim() : '';
+  return response.text ? response.text.trim() : '';
 }
 
 export async function analyzeTranscript(transcript: string, settings?: AISettings, baseOhms?: Record<string, number>): Promise<OhmAnalysisResult> {
@@ -170,10 +188,13 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
 export async function fetchOpenRouterModels(apiKey: string, endpoint: string = 'https://openrouter.ai/api/v1') {
   if (!apiKey) return [];
   try {
-    const response = await fetch(`/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`, {
+    const targetUrl = `${normalizeEndpoint(endpoint)}/models`;
+    const response = await fetch(targetUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'CHUNKS App',
       },
     });
     if (!response.ok) throw new Error(`Failed to fetch models: ${response.statusText}`);
@@ -189,83 +210,58 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
   const apiKey = settings?.apiKey;
   const primaryModel = settings?.primaryModel || 'gemini-2.0-flash';
   const fallbackModel = settings?.fallbackModel || 'gemini-1.5-flash';
-  const endpoint = settings?.endpoint;
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
   let lastError = null;
 
   for (const model of modelsToTry) {
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
       if (apiKey) {
-        headers['Authorization'] = `Bearer ${apiKey}`;
+        const targetUrl = `${normalizeEndpoint(settings?.endpoint)}/chat/completions`;
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'CHUNKS App',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+          return data.choices[0].message.content;
+        }
+        if (data.response) {
+          return data.response;
+        }
+        if (data.content && Array.isArray(data.content)) {
+          return data.content[0].text;
+        }
+        if (typeof data.text === 'string') {
+          return data.text;
+        }
+        throw new Error(`Unexpected API response format: ${JSON.stringify(data).substring(0, 200)}...`);
       }
 
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          endpoint,
-          model,
-          messages: [{ role: 'user', content: prompt }],
-          stream: false,
-        }),
+      const gClient = getGeminiClient(settings);
+      const response = await gClient.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        let errorMessage = errorData.error?.message || errorData.error || errorData.message;
-
-        if (!errorMessage && errorData.rawResponse) {
-          const raw = errorData.rawResponse;
-          if (raw.includes('<html') && raw.includes('530')) {
-            errorMessage = 'API Error 530: Cloudflare DNS/Origin error. The AI endpoint might be down or misconfigured.';
-          } else {
-            errorMessage = `API Error ${response.status}: ${raw.substring(0, 100)}...`;
-          }
-        }
-
-        errorMessage = errorMessage || `API Error: ${response.status}`;
-        throw new Error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
-      }
-
-      const data = await response.json();
-
-      if (data.choices && data.choices.length > 0 && data.choices[0].message) {
-        return data.choices[0].message.content;
-      }
-      if (data.response) {
-        return data.response;
-      }
-      if (data.content && Array.isArray(data.content)) {
-        return data.content[0].text;
-      }
-      if (typeof data.text === 'string') {
-        return data.text;
-      }
-      if (data.rawResponse) {
-        if (typeof data.rawResponse === 'string' && data.rawResponse.includes('data: {') && data.rawResponse.includes('"choices"')) {
-          let fullContent = '';
-          const lines = data.rawResponse.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
-              try {
-                const chunk = JSON.parse(line.substring(6));
-                if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) {
-                  fullContent += chunk.choices[0].delta.content;
-                }
-              } catch (e) {
-                // Ignore parse errors for individual lines
-              }
-            }
-          }
-          if (fullContent) return fullContent;
-        }
-        return data.rawResponse;
-      }
-
-      throw new Error(`Unexpected API response format: ${JSON.stringify(data).substring(0, 200)}...`);
+      if (response.text) return response.text;
     } catch (error) {
       console.warn(`Failed with model ${model}:`, error);
       lastError = error;

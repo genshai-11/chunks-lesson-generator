@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { collection, doc, onSnapshot, addDoc, query, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Resource, AISettings } from '../types';
@@ -63,32 +64,48 @@ If they just want to chat or it is ambiguous, output normal text response (no JS
 NOTE: If they specify ohm value, map it to targetU. Quantity to quantity. Topic to theme. Use their language.
 User: ${userMessage}`;
 
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aiSettings.apiKey || aiSettings.geminiApiKey || 'default'}`,
-        },
-        body: JSON.stringify({
-          endpoint: aiSettings.endpoint || 'https://openrouter.ai/api/v1',
-          model: aiSettings.primaryModel || 'google/gemini-2.5-flash',
-          stream: false,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error('API error: ' + response.status + ' - ' + JSON.stringify(data.error || data));
-
       let aiText = '';
-      if (data.choices && data.choices[0] && data.choices[0].message) {
-        aiText = data.choices[0].message.content;
-      } else if (data.response) {
-        aiText = data.response;
-      } else if (data.content && Array.isArray(data.content)) {
-        aiText = data.content[0].text;
-      } else if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) { aiText = data.candidates[0].content.parts[0].text; } else if (data.error) {
-        throw new Error('API returned an error: ' + JSON.stringify(data.error)); } else { throw new Error('Unexpected format: ' + JSON.stringify(data).substring(0, 100));
+      if (aiSettings.apiKey) {
+        const endpoint = aiSettings.endpoint?.trim() || 'https://openrouter.ai/api/v1';
+        const normalizedEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+        const response = await fetch(`${normalizedEndpoint}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${aiSettings.apiKey}`,
+            'HTTP-Referer': window.location.origin,
+            'X-Title': 'CHUNKS App',
+          },
+          body: JSON.stringify({
+            model: aiSettings.primaryModel || 'google/gemini-2.5-flash',
+            stream: false,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error('API error: ' + response.status + ' - ' + JSON.stringify(data.error || data));
+
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+          aiText = data.choices[0].message.content;
+        } else if (data.response) {
+          aiText = data.response;
+        } else if (data.content && Array.isArray(data.content)) {
+          aiText = data.content[0].text;
+        } else if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
+          aiText = data.candidates[0].content.parts[0].text;
+        } else if (data.error) {
+          throw new Error('API returned an error: ' + JSON.stringify(data.error));
+        } else {
+          throw new Error('Unexpected format: ' + JSON.stringify(data).substring(0, 100));
+        }
+      } else {
+        const ai = new GoogleGenAI({ apiKey: aiSettings.geminiApiKey! });
+        const response = await ai.models.generateContent({
+          model: aiSettings.primaryModel || 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        aiText = response.text || '';
       }
 
       const jsonMatch = aiText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || aiText.match(/\{[\s\S]*\}/);
