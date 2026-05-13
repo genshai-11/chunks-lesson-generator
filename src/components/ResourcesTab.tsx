@@ -26,9 +26,15 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortConfig, setSortConfig] = useState<{ key: keyof Resource | 'createdAt'; direction: 'asc' | 'desc' }>({ key: 'createdAt', direction: 'desc' });
 
-  // Filter state
+  // Filter & Pagination state
   const [searchTerm, setSearchTerm] = useState('');
   const [filterColor, setFilterColor] = useState<ColorCategory | 'All' | 'Duplicates'>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterColor]);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -130,6 +136,13 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
   };
+
+  const paginatedResources = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredResources.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredResources, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredResources.length / itemsPerPage);
 
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredResources.length) {
@@ -1229,7 +1242,7 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredResources.map((resource) => (
+                {paginatedResources.map((resource) => (
                   <tr key={resource.id} className={`${editingId === resource.id ? 'bg-red-50/30' : ''} ${selectedIds.has(resource.id) ? 'bg-red-50/50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input 
@@ -1332,6 +1345,48 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {filteredResources.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span>Rows per page:</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border-gray-300 rounded text-sm py-1 pl-2 pr-6"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-500">
+                {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredResources.length)} of {filteredResources.length}
+              </span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 px-3 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="p-1 px-3 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-100"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

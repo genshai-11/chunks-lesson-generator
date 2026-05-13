@@ -29,7 +29,7 @@ export default function Dashboard() {
 
     // Listen to Resources
     const unsubResources = onSnapshot(
-      query(collection(db, `workspaces/default/resources`), orderBy('createdAt', 'desc'), limit(100)),
+      query(collection(db, `workspaces/default/resources`), orderBy('createdAt', 'desc')),
       (snapshot) => {
         const resData: Resource[] = [];
         snapshot.forEach((doc) => resData.push({ id: doc.id, ...doc.data() } as Resource));
@@ -41,7 +41,7 @@ export default function Dashboard() {
 
     // Listen to Chunks
     const unsubChunks = onSnapshot(
-      query(collection(db, `workspaces/default/chunks`), orderBy('createdAt', 'desc'), limit(100)),
+      query(collection(db, `workspaces/default/chunks`), orderBy('createdAt', 'desc')),
       (snapshot) => {
         const chunkData: Chunk[] = [];
         snapshot.forEach((doc) => chunkData.push({ id: doc.id, ...doc.data() } as Chunk));

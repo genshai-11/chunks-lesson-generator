@@ -3,7 +3,7 @@ import { collection, onSnapshot, addDoc, query, limit } from 'firebase/firestore
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Resource, Chunk, AISettings, SentenceLength, ColorCategory } from '../types';
 import { generateChunk } from '../services/aiService';
-import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw, Activity, Zap, Cpu, Info, ChevronDown } from 'lucide-react';
+import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw, Activity, Zap, Cpu, Info, ChevronDown, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const MultiMeter = ({ label, value, unit, colorClass, icon: Icon, description }: { label: string, value: string | number, unit: string, colorClass: string, icon: any, description?: string }) => (
@@ -100,7 +100,7 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
   };
   
   // AI Mode State
-  const [topicMode, setTopicMode] = useState<'preset' | 'infer' | 'random'>('infer');
+  const [topicMode, setTopicMode] = useState<'preset' | 'infer' | 'random'>('preset');
   const [aiTheme, setAiTheme] = useState('Daily Life');
   const [blueprintMode, setBlueprintMode] = useState<'targetOhm' | 'recipe'>('targetOhm');
   const [aiTargetCVR, setAiTargetCVR] = useState<number>(10);
@@ -287,17 +287,25 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
 
         while (attempts < maxAttempts) {
           let testCombo: Resource[] = [];
-          
-          const tempResources = [...filteredResources].sort(() => 0.5 - Math.random());
           const colorCounts: Record<string, number> = {};
           
-          for (const r of tempResources) {
-            if (testCombo.length >= targetItemCount) break;
+          // Efficient partial Fisher-Yates shuffle instead of full array sort
+          const indices = Array.from({ length: filteredResources.length }, (_, i) => i);
+          let available = indices.length;
+          
+          while (testCombo.length < targetItemCount && available > 0) {
+            const randIdx = Math.floor(Math.random() * available);
+            const r = filteredResources[indices[randIdx]];
+            
             const count = colorCounts[r.color] || 0;
             if (count < aiMaxPerColor) {
               testCombo.push(r);
               colorCounts[r.color] = count + 1;
             }
+            
+            // Swap with the last available to prevent picking again
+            indices[randIdx] = indices[available - 1];
+            available--;
           }
 
           const testBaseTC = calculateOhm(testCombo);
@@ -422,6 +430,30 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
         return next;
       });
     }
+  };
+
+  const handleUpdateDraftTL = (index: number, newTL: number) => {
+    setDraftChunks(prev => {
+      const next = [...prev];
+      const draft = { ...next[index] };
+      draft.tl = newTL;
+      const lc = draft.lc || 1.0;
+      draft.iValue = lc * newTL;
+      draft.uTotal = Math.round((draft.rTotal * draft.iValue) * 10) / 10;
+      next[index] = draft;
+      return next;
+    });
+  };
+
+  const handleApplyTLToAll = (newTL: number) => {
+    setDraftChunks(prev => prev.map(draft => {
+      const updated = { ...draft };
+      updated.tl = newTL;
+      const lc = updated.lc || 1.0;
+      updated.iValue = lc * newTL;
+      updated.uTotal = Math.round((updated.rTotal * updated.iValue) * 10) / 10;
+      return updated;
+    }));
   };
 
   const handleExecuteAllPending = async () => {
@@ -616,33 +648,35 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
 
                   {topicMode === 'preset' && (
                     <div className="flex flex-col gap-2 mt-2">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Preset Topic</label>
-                        <select
-                          value={!TOPIC_PRESETS.find(p => p.value === aiTheme) ? 'Custom' : aiTheme}
-                          onChange={(e) => {
-                            const selected = e.target.value;
-                            if (selected === 'Custom') {
-                              setAiTheme('');
-                            } else {
-                              setAiTheme(selected);
-                              const presetInfo = TOPIC_PRESETS.find(p => p.value === selected);
-                              if (presetInfo) {
-                                setAiTopicLevel(presetInfo.tl);
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Preset Topic</label>
+                          <select
+                            value={!TOPIC_PRESETS.find(p => p.value === aiTheme) ? 'Custom' : aiTheme}
+                            onChange={(e) => {
+                              const selected = e.target.value;
+                              if (selected === 'Custom') {
+                                setAiTheme('');
+                              } else {
+                                setAiTheme(selected);
+                                const presetInfo = TOPIC_PRESETS.find(p => p.value === selected);
+                                if (presetInfo) {
+                                  setAiTopicLevel(presetInfo.tl);
+                                }
                               }
-                            }
-                          }}
-                          className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm font-medium bg-white"
-                        >
-                          {TOPIC_PRESETS.map((preset) => (
-                            <option key={preset.value} value={preset.value}>{preset.label}</option>
-                          ))}
-                          <option value="Custom">✨ Custom Topic...</option>
-                        </select>
+                            }}
+                            className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm font-medium bg-white"
+                          >
+                            {TOPIC_PRESETS.map((preset) => (
+                              <option key={preset.value} value={preset.value}>{preset.label}</option>
+                            ))}
+                            <option value="Custom">✨ Custom Topic...</option>
+                          </select>
+                        </div>
                       </div>
 
                       {!TOPIC_PRESETS.find(p => p.value === aiTheme) && (
-                        <div className="flex-1 animate-in fade-in slide-in-from-top-1">
+                        <div className="animate-in fade-in slide-in-from-top-1">
                           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Custom Topic</label>
                           <input 
                             type="text" 
@@ -1023,7 +1057,25 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
                         <div className="w-px h-5 bg-gray-300" />
                         <div className="flex items-center gap-2" title="Topic Level">
                           <span className="text-[10px] md:text-xs font-black text-gray-400 uppercase tracking-widest italic">TL</span>
-                          <div className="text-sm font-black text-gray-700 leading-none">×{draft.tl?.toFixed(1) || 1.0}</div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0.1"
+                              value={draft.tl || 1.0}
+                              onChange={(e) => handleUpdateDraftTL(idx, Number(e.target.value))}
+                              className="w-16 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-sm font-black text-gray-700 outline-none hover:border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-colors"
+                            />
+                            {draftChunks.length > 1 && (
+                              <button
+                                onClick={() => handleApplyTLToAll(draft.tl || 1.0)}
+                                title="Apply this TL to all pending drafts"
+                                className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       
