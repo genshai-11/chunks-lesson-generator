@@ -264,36 +264,23 @@ export default function SettingsTab() {
     }
     setFetchingVoices(true);
     try {
-      const providerParam = nineRouterFilterProvider ? `?provider=${encodeURIComponent(nineRouterFilterProvider)}` : '';
-      const normalizedUrl = settings.nineRouterUrl.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
-      const headers = settings.nineRouterApiKey ? {
-        'Authorization': `Bearer ${settings.nineRouterApiKey}`,
-      } : undefined;
-
-      let response = await fetch(`${normalizedUrl}/v1/audio/voices${providerParam}`, { headers });
-      let data: any = null;
-
-      if (response.ok) {
-        data = await response.json();
-      } else {
-        response = await fetch(`${normalizedUrl}/v1/models/tts`, { headers });
-        if (response.ok) {
-          const fallbackData = await response.json();
-          data = {
-            data: (fallbackData.data || []).map((m: any) => ({
-              model: m.id || m.model || '',
-              name: m.name || m.id || m.model || 'Default Voice',
-              provider: m.provider || (m.id && m.id.includes('/') ? m.id.split('/')[0] : 'unknown'),
-            })),
-          };
-        }
+      const providerParam = nineRouterFilterProvider ? `&provider=${nineRouterFilterProvider}` : '';
+      const response = await fetch(`/api/tts/9router/voices?endpoint=${encodeURIComponent(settings.nineRouterUrl)}${providerParam}`, {
+        headers: settings.nineRouterApiKey ? {
+          'Authorization': `Bearer ${settings.nineRouterApiKey}`,
+        } : undefined,
+      });
+      
+      if (!response.ok) {
+        let errMessage = response.statusText;
+        try {
+          const errData = await response.json();
+          if (errData.error) errMessage = errData.error;
+        } catch (e) {}
+        throw new Error(`Failed to fetch 9Router voices: ${errMessage}`);
       }
-
-      if (!response.ok || !data) {
-        const errText = await response.text().catch(() => response.statusText);
-        throw new Error(`Failed to fetch 9Router voices: ${errText || response.statusText}`);
-      }
-
+      
+      const data = await response.json();
       setNineRouterVoices(data.data || []);
     } catch (error: any) {
       console.error('Error fetching 9Router voices:', error);
