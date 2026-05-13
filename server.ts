@@ -437,6 +437,127 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     }
   });
 
+  // Resources API
+  app.get('/api/resources', validateApiKey, async (req, res) => {
+    try {
+      const { collection, getDocs, query, limit, orderBy } = await import('firebase/firestore');
+      const { db } = await import('./src/firebase');
+      
+      const maxLimit = parseInt(req.query.limit as string) || 100;
+      
+      const q = query(
+        collection(db, 'workspaces/default/resources'), 
+        orderBy('createdAt', 'desc'),
+        limit(maxLimit)
+      );
+      
+      const snapshot = await getDocs(q);
+      const resources = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      res.json({
+        status: 'success',
+        count: resources.length,
+        data: resources
+      });
+    } catch (error: any) {
+      console.error('API Resources Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // Chunks API
+  app.get('/api/chunks', validateApiKey, async (req, res) => {
+    try {
+      const { collection, getDocs, query, limit, orderBy } = await import('firebase/firestore');
+      const { db } = await import('./src/firebase');
+      
+      const maxLimit = parseInt(req.query.limit as string) || 50;
+      
+      const q = query(
+        collection(db, 'workspaces/default/chunks'), 
+        orderBy('createdAt', 'desc'),
+        limit(maxLimit)
+      );
+      
+      const snapshot = await getDocs(q);
+      const chunks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      res.json({
+        status: 'success',
+        count: chunks.length,
+        data: chunks
+      });
+    } catch (error: any) {
+      console.error('API Chunks Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // Add a new Resource externally
+  app.post('/api/resources', validateApiKey, async (req, res) => {
+    try {
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('./src/firebase');
+      
+      const { text, type, category, authorId, color, tc } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ status: 'error', message: 'Text is required' });
+      }
+
+      const docRef = await addDoc(collection(db, 'workspaces/default/resources'), {
+        text,
+        type: type || 'Sentence',
+        category: category || 'Default',
+        authorId: authorId || 'API_USER',
+        color: color || 'Green',
+        tc: tc || null,
+        createdAt: serverTimestamp(),
+      });
+      
+      res.json({
+        status: 'success',
+        id: docRef.id,
+        message: 'Resource created successfully'
+      });
+    } catch (error: any) {
+      console.error('API Post Resource Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
+  // Add a new Chunk externally
+  app.post('/api/chunks', validateApiKey, async (req, res) => {
+    try {
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('./src/firebase');
+      
+      const { engSentence, vieSentence, resourcesUsed, authorId, length } = req.body;
+      
+      if (!engSentence || !vieSentence) {
+        return res.status(400).json({ status: 'error', message: 'engSentence and vieSentence are required' });
+      }
+
+      const docRef = await addDoc(collection(db, 'workspaces/default/chunks'), {
+        engSentence,
+        vieSentence,
+        resourcesUsed: resourcesUsed || [],
+        authorId: authorId || 'API_USER',
+        length: length || 'Medium',
+        createdAt: serverTimestamp(),
+      });
+      
+      res.json({
+        status: 'success',
+        id: docRef.id,
+        message: 'Chunk created successfully'
+      });
+    } catch (error: any) {
+      console.error('API Post Chunk Error:', error);
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  });
+
   // Proxy for OpenRouter Models
   app.get('/api/ai/models', async (req, res) => {
     const apiKey = req.headers.authorization;

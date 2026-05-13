@@ -288,24 +288,19 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
         while (attempts < maxAttempts) {
           let testCombo: Resource[] = [];
           const colorCounts: Record<string, number> = {};
+          const chosenIndices = new Set<number>();
           
-          // Efficient partial Fisher-Yates shuffle instead of full array sort
-          const indices = Array.from({ length: filteredResources.length }, (_, i) => i);
-          let available = indices.length;
-          
-          while (testCombo.length < targetItemCount && available > 0) {
-            const randIdx = Math.floor(Math.random() * available);
-            const r = filteredResources[indices[randIdx]];
+          while (testCombo.length < targetItemCount && chosenIndices.size < filteredResources.length) {
+            const randIdx = Math.floor(Math.random() * filteredResources.length);
+            if (chosenIndices.has(randIdx)) continue;
+            chosenIndices.add(randIdx);
             
+            const r = filteredResources[randIdx];
             const count = colorCounts[r.color] || 0;
             if (count < aiMaxPerColor) {
               testCombo.push(r);
               colorCounts[r.color] = count + 1;
             }
-            
-            // Swap with the last available to prevent picking again
-            indices[randIdx] = indices[available - 1];
-            available--;
           }
 
           const testBaseTC = calculateOhm(testCombo);
