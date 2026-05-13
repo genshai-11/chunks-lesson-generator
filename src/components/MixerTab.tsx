@@ -90,6 +90,8 @@ const TOPIC_PRESETS = [
   { label: '📖 Literature & Poetry', value: 'Literature', tl: 2.0 },
 ];
 
+const roundTL = (value: number) => Math.round(value * 10) / 10;
+
 export default function MixerTab({ resources, aiSettings }: { resources: Resource[], aiSettings?: AISettings }) {
   // Notification State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -329,7 +331,7 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
             expectedMaxTL = matchedTier.max;
 
             let requiredTL = aiTargetCVR / (testBaseTC * lc);
-            requiredTL = Math.max(expectedMinTL, Math.min(expectedMaxTL, requiredTL));
+            requiredTL = roundTL(Math.max(expectedMinTL, Math.min(expectedMaxTL, requiredTL)));
             
             const testFinalCVR = testBaseTC * lc * requiredTL;
             const currentDiff = Math.abs(testFinalCVR - aiTargetCVR);
@@ -347,7 +349,7 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
         }
         currentCombo = bestCombo;
         currentTC = bestBaseTC;
-        currentTL = bestTL;
+        currentTL = roundTL(bestTL);
         finalI = lc * currentTL; // Recalculate with dynamic TL
       }
 
@@ -428,12 +430,13 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
   };
 
   const handleUpdateDraftTL = (index: number, newTL: number) => {
+    const normalizedTL = roundTL(newTL);
     setDraftChunks(prev => {
       const next = [...prev];
       const draft = { ...next[index] };
-      draft.tl = newTL;
+      draft.tl = normalizedTL;
       const lc = draft.lc || 1.0;
-      draft.iValue = lc * newTL;
+      draft.iValue = lc * normalizedTL;
       draft.uTotal = Math.round((draft.rTotal * draft.iValue) * 10) / 10;
       next[index] = draft;
       return next;
@@ -441,11 +444,12 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
   };
 
   const handleApplyTLToAll = (newTL: number) => {
+    const normalizedTL = roundTL(newTL);
     setDraftChunks(prev => prev.map(draft => {
       const updated = { ...draft };
-      updated.tl = newTL;
+      updated.tl = normalizedTL;
       const lc = updated.lc || 1.0;
-      updated.iValue = lc * newTL;
+      updated.iValue = lc * normalizedTL;
       updated.uTotal = Math.round((updated.rTotal * updated.iValue) * 10) / 10;
       return updated;
     }));
@@ -1057,13 +1061,13 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
                               type="number"
                               step="0.1"
                               min="0.1"
-                              value={draft.tl || 1.0}
+                              value={(draft.tl ?? 1.0).toFixed(1)}
                               onChange={(e) => handleUpdateDraftTL(idx, Number(e.target.value))}
                               className="w-16 bg-white border border-gray-200 rounded px-1.5 py-0.5 text-sm font-black text-gray-700 outline-none hover:border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-colors"
                             />
                             {draftChunks.length > 1 && (
                               <button
-                                onClick={() => handleApplyTLToAll(draft.tl || 1.0)}
+                                onClick={() => handleApplyTLToAll(draft.tl ?? 1.0)}
                                 title="Apply this TL to all pending drafts"
                                 className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                               >
