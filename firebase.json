@@ -12,7 +12,7 @@
         "source": "/api{,/**}",
         "run": {
           "serviceId": "chunks-generator-api",
-          "region": "asia-east1",
+          "region": "asia-southeast1",
           "pinTag": true
         }
       },
