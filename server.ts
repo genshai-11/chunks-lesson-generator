@@ -11,9 +11,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
-  const serveStatic = process.env.SERVE_STATIC === 'true';
-  const fallbackM2MApiKey = process.env.M2M_API_KEY || 'm2m_CHUNK_ANALYZER_SECURE_2026';
+  const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -60,7 +58,8 @@ async function startServer() {
         return next();
       }
 
-      if (providedKey === fallbackM2MApiKey) {
+      // Hardcoded fallback for the specific key you requested
+      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') {
         return next();
       }
 
@@ -69,7 +68,7 @@ async function startServer() {
         error: 'Unauthorized. Valid X-API-Key is required for M2M.' 
       });
     } catch (error) {
-      if (providedKey === fallbackM2MApiKey) return next();
+      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') return next();
       next();
     }
   };
@@ -277,16 +276,12 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
   // This helps bypass cookie gates or secure the API for external server A
   // (Middleware moved to top)
 
-  // Transcription API (used by the app and optional 3rd parties)
-  app.post('/api/transcribe', async (req, res) => {
-    const { audioData, mimeType, model } = req.body;
+  // Transcription API (Can be used by 3rd party)
+  app.post('/api/transcribe', validateApiKey, async (req, res) => {
+    const { audioData, mimeType } = req.body;
 
     if (!audioData) {
       return res.status(400).json({ error: 'Audio data (base64) is required' });
-    }
-
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ status: 'error', error: 'Server Gemini API key is not configured.' });
     }
 
     try {
@@ -294,7 +289,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
       const response = await ai.models.generateContent({
-        model: model || 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         contents: {
           parts: [
             {
@@ -657,46 +652,10 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     }
   });
 
-  // AI chat endpoint: proxy custom providers when an API key is provided,
-  // otherwise use the server-side default Gemini key.
+  // Proxy for OpenRouter Chat
   app.post('/api/ai/chat', async (req, res) => {
     const apiKey = req.headers.authorization;
-    let { endpoint, model, messages, contents, prompt, ...body } = req.body;
-
-    if (!apiKey) {
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ error: 'Server Gemini API key is not configured.' });
-      }
-
-      const promptText = typeof prompt === 'string'
-        ? prompt
-        : Array.isArray(messages)
-          ? messages.map((message: any) => message?.content).filter(Boolean).join('\n\n')
-          : typeof contents === 'string'
-            ? contents
-            : '';
-
-      if (!promptText) {
-        return res.status(400).json({ error: 'Prompt content is required.' });
-      }
-
-      try {
-        const { GoogleGenAI } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-          model: model || 'gemini-2.5-flash',
-          contents: promptText,
-          config: {
-            responseMimeType: 'application/json'
-          }
-        });
-
-        return res.json({ response: response.text || '' });
-      } catch (error: any) {
-        console.error('Default Gemini backend error:', error);
-        return res.status(500).json({ error: error.message || 'Default Gemini request failed.' });
-      }
-    }
+    let { endpoint, ...body } = req.body;
 
     if (!endpoint || endpoint.trim() === '') {
       endpoint = 'https://openrouter.ai/api/v1';
@@ -706,7 +665,8 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
         endpoint = 'https://' + endpoint;
       }
     }
-
+    
+    // Remove trailing slash if present
     if (endpoint.endsWith('/')) {
       endpoint = endpoint.slice(0, -1);
     }
@@ -714,9 +674,13 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     const targetUrl = `${endpoint}/chat/completions`;
 
     try {
-      new URL(targetUrl);
+      new URL(targetUrl); // Validate URL format
     } catch (e) {
       return res.status(400).json({ error: `Invalid API endpoint URL: ${targetUrl}` });
+    }
+
+    if (!apiKey) {
+      return res.status(401).json({ error: 'API Key required' });
     }
 
     try {
@@ -728,7 +692,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
           'HTTP-Referer': 'https://chunks-app.ai',
           'X-Title': 'CHUNKS App',
         },
-        body: JSON.stringify({ model, messages, contents, prompt, ...body }),
+        body: JSON.stringify(body),
       });
 
       let rawText = '';
@@ -742,6 +706,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
       try {
         data = JSON.parse(rawText);
       } catch (e) {
+        // If it's not JSON, wrap it so the client doesn't crash on response.json()
         data = { rawResponse: rawText };
       }
 
@@ -752,7 +717,7 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
       res.json(data);
     } catch (error: any) {
       console.error(`Proxy Chat Error for URL ${targetUrl}:`, error);
-
+      
       let errorMessage = 'Failed to call AI via proxy';
       if (error instanceof Error) {
         errorMessage = error.message;
@@ -769,9 +734,29 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
           }
         }
       }
-
+      
       res.status(502).json({ error: errorMessage, target: targetUrl });
     }
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`API health check available at /api/ping`);
   });
 
   // Public Ping Endpoint for Connectivity Debugging
@@ -782,38 +767,8 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
       timestamp: new Date().toISOString(),
       message: 'M2M API Gateway is active',
       environment: process.env.NODE_ENV || 'development',
-      serveStatic,
-      hint: 'If you still see HTML here, check Hosting rewrite order for /api/**.'
+      hint: 'If you still see an HTML 302, verify you are using the Shared App URL (-pre-).'
     });
-  });
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else if (serveStatic) {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  } else {
-    app.get('/', (req, res) => {
-      res.json({
-        status: 'ok',
-        service: 'chunks-generator-api',
-        message: 'Backend is running. Use /api/* endpoints through Firebase Hosting.',
-      });
-    });
-  }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`API health check available at /api/ping`);
-    console.log(`Static serving enabled: ${serveStatic}`);
   });
 }
 

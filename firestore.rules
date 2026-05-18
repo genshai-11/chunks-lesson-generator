@@ -79,6 +79,10 @@ service cloud.firestore {
         allow delete: if isAuthenticated();
       }
 
+      match /cvr_history/{historyId} {
+        allow read, write: if isAuthenticated();
+      }
+
       match /settings/{settingId} {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated() && isValidAISettings();

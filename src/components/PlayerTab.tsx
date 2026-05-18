@@ -1,32 +1,94 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Chunk } from '../types';
-import { Filter, ChevronLeft, ChevronRight, Volume2, Play, Eye, EyeOff, VideoOff, Video } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import { db, auth, handleFirestoreError, OperationType } from "../firebase";
+import { Chunk } from "../types";
+import {
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  Volume2,
+  Play,
+  Eye,
+  EyeOff,
+  VideoOff,
+  Video,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
-export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loading: boolean }) {
+export default function PlayerTab() {
+  const [chunks, setChunks] = useState<Chunk[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      query(
+        collection(db, `workspaces/default/chunks`),
+        orderBy("createdAt", "desc"),
+        limit(500),
+      ),
+      (snapshot) => {
+        const chunkData: Chunk[] = [];
+        snapshot.forEach((doc) =>
+          chunkData.push({ id: doc.id, ...doc.data() } as Chunk),
+        );
+        setChunks(chunkData);
+        setLoading(false);
+      },
+      (error) => {
+        handleFirestoreError(
+          error,
+          OperationType.LIST,
+          `workspaces/default/chunks`,
+        );
+        setLoading(false);
+      },
+    );
+    return () => unsub();
+  }, []);
   // Filters
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedRs, setSelectedRs] = useState<Set<number>>(new Set());
-  const [audioStatus, setAudioStatus] = useState<'all' | 'hasAudio' | 'noAudio'>('all');
-  
+  const [audioStatus, setAudioStatus] = useState<
+    "all" | "hasAudio" | "noAudio"
+  >("all");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   // Player state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showEnglish, setShowEnglish] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   // Extract all unique categories
-  const uniqueCategories = useMemo(() => Array.from(new Set(chunks.map(c => c.category))).filter(Boolean).sort(), [chunks]);
+  const uniqueCategories = useMemo(
+    () =>
+      Array.from(new Set(chunks.map((c) => c.category)))
+        .filter(Boolean)
+        .sort(),
+    [chunks],
+  );
 
   // Extract all unique R Values (rTotal)
-  const uniqueRs = useMemo(() => (Array.from(new Set(chunks.map(c => Number(c.rTotal)))) as number[]).filter(n => !isNaN(n)).sort((a: number, b: number) => a - b), [chunks]);
+  const uniqueRs = useMemo(
+    () =>
+      (Array.from(new Set(chunks.map((c) => Number(c.rTotal)))) as number[])
+        .filter((n) => !isNaN(n))
+        .sort((a: number, b: number) => a - b),
+    [chunks],
+  );
 
   const toggleRFilter = (r: number) => {
-    setSelectedRs(prev => {
+    setSelectedRs((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(r)) newSet.delete(r);
       else newSet.add(r);
@@ -36,29 +98,36 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
 
   const filteredChunks = useMemo(() => {
     let result = chunks;
-    if (selectedCategory !== 'all') {
-      result = result.filter(c => c.category === selectedCategory);
+    if (selectedCategory !== "all") {
+      result = result.filter((c) => c.category === selectedCategory);
     }
     if (selectedRs.size > 0) {
-      result = result.filter(c => selectedRs.has(Number(c.rTotal)));
+      result = result.filter((c) => selectedRs.has(Number(c.rTotal)));
     }
-    if (audioStatus === 'hasAudio') {
-      result = result.filter(c => !!c.audioUrl);
-    } else if (audioStatus === 'noAudio') {
-      result = result.filter(c => !c.audioUrl);
+    if (audioStatus === "hasAudio") {
+      result = result.filter((c) => !!c.audioUrl);
+    } else if (audioStatus === "noAudio") {
+      result = result.filter((c) => !c.audioUrl);
     }
     return result;
   }, [chunks, selectedCategory, selectedRs, audioStatus]);
 
   useEffect(() => {
     setCurrentIndex(0);
+    setCurrentPage(1);
     setShowEnglish(false);
   }, [filteredChunks]);
+
+  const totalPages = Math.ceil(filteredChunks.length / PAGE_SIZE) || 1;
+  const paginatedChunks = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredChunks.slice(start, start + PAGE_SIZE);
+  }, [filteredChunks, currentPage]);
 
   const toggleCamera = async () => {
     if (cameraActive) {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
@@ -66,7 +135,9 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
       setCameraActive(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -82,39 +153,55 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
   useEffect(() => {
     return () => {
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
   const currentChunk = filteredChunks[currentIndex] || null;
 
-  const renderHighlightedSentence = (sentence: string, resourcesUsed: any[]) => {
+  const renderHighlightedSentence = (
+    sentence: string,
+    resourcesUsed: any[],
+  ) => {
     if (!resourcesUsed || resourcesUsed.length === 0) return <>{sentence}</>;
-    
+
     // Sort by length descending to match longest phrases first
     const validResources = resourcesUsed
-      .filter(r => typeof r !== 'string')
+      .filter((r) => typeof r !== "string")
       .sort((a, b) => b.name.length - a.name.length);
-      
+
     if (validResources.length === 0) return <>{sentence}</>;
 
-    const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patternStr = validResources.map(r => escapeRegExp(r.name)).join('|');
-    const pattern = new RegExp(`(${patternStr})`, 'gi');
-    
+    const escapeRegExp = (string: string) =>
+      string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patternStr = validResources
+      .map((r) => escapeRegExp(r.name))
+      .join("|");
+    const pattern = new RegExp(`(${patternStr})`, "gi");
+
     const parts = sentence.split(pattern);
-    
+
     return parts.map((part, i) => {
       const lowerPart = part.toLowerCase();
-      const matchedRes = validResources.find(r => r.name.toLowerCase() === lowerPart);
+      const matchedRes = validResources.find(
+        (r) => r.name.toLowerCase() === lowerPart,
+      );
       if (matchedRes) {
         const color = matchedRes.color;
-        const colorClass = color === 'Green' ? 'text-green-400 font-extrabold bg-green-900/40 px-1 py-0.5 rounded' : 
-                           color === 'Blue' ? 'text-blue-400 font-extrabold bg-blue-900/40 px-1 py-0.5 rounded' :
-                           color === 'Red' ? 'text-red-400 font-extrabold bg-red-900/40 px-1 py-0.5 rounded' :
-                           'text-pink-400 font-extrabold bg-pink-900/40 px-1 py-0.5 rounded';
-        return <span key={i} className={colorClass}>{part}</span>;
+        const colorClass =
+          color === "Green"
+            ? "text-green-400 font-extrabold bg-green-900/40 px-1 py-0.5 rounded"
+            : color === "Blue"
+              ? "text-blue-400 font-extrabold bg-blue-900/40 px-1 py-0.5 rounded"
+              : color === "Red"
+                ? "text-red-400 font-extrabold bg-red-900/40 px-1 py-0.5 rounded"
+                : "text-pink-400 font-extrabold bg-pink-900/40 px-1 py-0.5 rounded";
+        return (
+          <span key={i} className={colorClass}>
+            {part}
+          </span>
+        );
       }
       return <span key={i}>{part}</span>;
     });
@@ -127,7 +214,7 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
       new Audio(currentChunk.vieAudioUrl).play();
     } else {
       const utterance = new SpeechSynthesisUtterance(currentChunk.vieSentence);
-      utterance.lang = 'vi-VN';
+      utterance.lang = "vi-VN";
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -139,21 +226,25 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
       new Audio(currentChunk.audioUrl).play();
     } else {
       const utterance = new SpeechSynthesisUtterance(currentChunk.engSentence);
-      utterance.lang = 'en-US';
+      utterance.lang = "en-US";
       window.speechSynthesis.speak(utterance);
     }
   };
 
   const handleNext = () => {
     if (currentIndex < filteredChunks.length - 1) {
-      setCurrentIndex(prev => prev + 1);
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setCurrentPage(Math.floor(nextIndex / PAGE_SIZE) + 1);
       setShowEnglish(false);
     }
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
+      const prevIndex = currentIndex - 1;
+      setCurrentIndex(prevIndex);
+      setCurrentPage(Math.floor(prevIndex / PAGE_SIZE) + 1);
       setShowEnglish(false);
     }
   };
@@ -168,7 +259,6 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 h-[calc(100vh-140px)] md:h-[calc(100vh-80px)] animate-in fade-in duration-500">
-      
       {/* Sidebar Filters & List */}
       <div className="w-full md:w-80 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden shrink-0 h-[40%] md:h-full">
         <div className="p-3 md:p-4 border-b border-gray-100 shrink-0 flex flex-col gap-3">
@@ -176,24 +266,30 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
             <Filter className="w-4 h-4 mr-2" />
             Filters
           </h3>
-          
+
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Category</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                Category
+              </label>
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded p-1.5 text-xs focus:ring-1 focus:ring-red-500 focus:outline-none"
               >
                 <option value="all">All</option>
-                {uniqueCategories.map(c => (
-                  <option key={c} value={c}>{c}</option>
+                {uniqueCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Audio</label>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                Audio
+              </label>
               <select
                 value={audioStatus}
                 onChange={(e) => setAudioStatus(e.target.value as any)}
@@ -207,86 +303,135 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
           </div>
 
           <div>
-             <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Load (Sum R)</label>
-             <div className="flex flex-wrap gap-1 max-h-[60px] overflow-y-auto w-full pr-1 hide-scrollbar">
-                {uniqueRs.length > 0 ? (
-                  uniqueRs.map(r => (
-                    <label key={r} className={`flex items-center gap-1.5 text-[10px] cursor-pointer px-2 py-1 rounded border transition-colors ${selectedRs.has(r) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedRs.has(r)} 
-                        onChange={() => toggleRFilter(r)} 
-                        className="w-3 h-3 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer" 
-                      />
-                      <span className={`font-medium ${selectedRs.has(r) ? 'text-red-700' : 'text-gray-600'}`}>{r.toFixed(0)}</span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-[10px] text-gray-400 italic">No R data.</p>
-                )}
+            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+              Load (Sum R)
+            </label>
+            <div className="flex flex-wrap gap-1 max-h-[60px] overflow-y-auto w-full pr-1 hide-scrollbar">
+              {uniqueRs.length > 0 ? (
+                uniqueRs.map((r) => (
+                  <label
+                    key={r}
+                    className={`flex items-center gap-1.5 text-[10px] cursor-pointer px-2 py-1 rounded border transition-colors ${selectedRs.has(r) ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200 hover:bg-gray-100"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRs.has(r)}
+                      onChange={() => toggleRFilter(r)}
+                      className="w-3 h-3 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                    />
+                    <span
+                      className={`font-medium ${selectedRs.has(r) ? "text-red-700" : "text-gray-600"}`}
+                    >
+                      {r.toFixed(0)}
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-[10px] text-gray-400 italic">No R data.</p>
+              )}
             </div>
           </div>
-          
+
           <div className="text-[10px] font-medium text-gray-500 flex justify-between mt-1">
             <span>Showing {filteredChunks.length} chunks</span>
             {selectedRs.size > 0 && (
-              <button onClick={() => setSelectedRs(new Set())} className="text-red-500 hover:text-red-600 font-bold">Clear Load</button>
+              <button
+                onClick={() => setSelectedRs(new Set())}
+                className="text-red-500 hover:text-red-600 font-bold"
+              >
+                Clear Load
+              </button>
             )}
           </div>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {filteredChunks.map((chunk, idx) => (
+          {paginatedChunks.map((chunk, localIdx) => {
+            const globalIdx = (currentPage - 1) * PAGE_SIZE + localIdx;
+            return (
             <button
               key={chunk.id}
               onClick={() => {
-                setCurrentIndex(idx);
+                setCurrentIndex(globalIdx);
                 setShowEnglish(false);
               }}
               className={`w-full text-left p-2 md:p-3 rounded-xl transition-all duration-200 ${
-                idx === currentIndex
-                  ? 'bg-red-50 border border-red-200 shadow-sm'
-                  : 'hover:bg-gray-50 border border-transparent'
+                globalIdx === currentIndex
+                  ? "bg-red-50 border border-red-200 shadow-sm"
+                  : "hover:bg-gray-50 border border-transparent"
               }`}
             >
-              <p className={`text-sm line-clamp-2 ${idx === currentIndex ? 'font-bold text-red-900' : 'font-medium text-gray-700'}`}>
+              <p
+                className={`text-sm line-clamp-2 ${globalIdx === currentIndex ? "font-bold text-red-900" : "font-medium text-gray-700"}`}
+              >
                 {chunk.vieSentence}
               </p>
               <div className="mt-2 flex items-center justify-between">
-                <span className={`text-xs ${idx === currentIndex ? 'text-red-600' : 'text-gray-500'}`}>Ohm: {chunk.uTotal.toFixed(0)}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${idx === currentIndex ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {chunk.category || 'Uncategorized'}
+                <span
+                  className={`text-xs ${globalIdx === currentIndex ? "text-red-600" : "text-gray-500"}`}
+                >
+                  Ohm: {chunk.uTotal.toFixed(0)}
+                </span>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full ${globalIdx === currentIndex ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"}`}
+                >
+                  {chunk.category || "Uncategorized"}
                 </span>
               </div>
             </button>
-          ))}
+            );
+          })}
           {filteredChunks.length === 0 && (
             <div className="text-center py-10 text-gray-400 text-sm">
               No chunks match the current filter.
             </div>
           )}
         </div>
+        
+        {/* Pagination Controls */}
+        {filteredChunks.length > PAGE_SIZE && (
+          <div className="p-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg disabled:opacity-50 text-xs font-semibold text-gray-600 transition-colors shadow-sm"
+            >
+              Prev
+            </button>
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg disabled:opacity-50 text-xs font-semibold text-gray-600 transition-colors shadow-sm"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Player Area */}
       <div className="flex-1 rounded-2xl overflow-hidden bg-gray-900 relative shadow-2xl flex flex-col min-h-[350px]">
-        
         {/* Video feed (Background) */}
         <div className="absolute inset-0 bg-gray-900 overflow-hidden flex items-center justify-center pointer-events-none">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            className={`min-w-full min-h-full object-cover transition-opacity duration-700 ${cameraActive ? 'opacity-100' : 'opacity-0'}`} 
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`min-w-full min-h-full object-cover transition-opacity duration-700 ${cameraActive ? "opacity-100" : "opacity-0"}`}
           />
-          
+
           {/* Face outline guide */}
           {cameraActive && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-48 h-64 border-2 border-dashed border-cyan-400/40 rounded-[100%] absolute transform -translate-y-16"></div>
               <div className="bg-black/40 backdrop-blur-sm px-4 py-2 rounded-full transform -translate-y-16 mt-40">
-                <span className="text-white/80 text-xs font-medium">Position your face here</span>
+                <span className="text-white/80 text-xs font-medium">
+                  Position your face here
+                </span>
               </div>
             </div>
           )}
@@ -294,7 +439,6 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
 
         {/* Scrollable Content Area - Takes remaining space */}
         <div className="relative z-10 flex-1 flex flex-col px-4 md:px-6 pb-4 md:pb-8 pt-4 md:pt-8 overflow-y-auto min-h-0">
-          
           <AnimatePresence mode="wait">
             {currentChunk ? (
               <motion.div
@@ -308,15 +452,21 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
                 {/* Visual Indicators for Resources inside current chunk */}
                 <div className="flex flex-wrap justify-center gap-1.5 mb-4 md:mb-6 w-full">
                   {currentChunk.resourcesUsed.map((res, idx) => {
-                    if (typeof res === 'string') return null;
+                    if (typeof res === "string") return null;
                     return (
-                      <span key={idx} className={`px-2.5 py-1 text-[10px] md:text-[11px] font-bold rounded-lg uppercase tracking-wider border whitespace-nowrap ${
-                        res.color === 'Green' ? 'bg-green-900/50 text-green-300 border-green-500/30' :
-                        res.color === 'Blue' ? 'bg-blue-900/50 text-blue-300 border-blue-500/30' :
-                        res.color === 'Red' ? 'bg-red-900/50 text-red-300 border-red-500/30' :
-                        'bg-pink-900/50 text-pink-300 border-pink-500/30'
-                      }`}>
-                         {res.color} Ohm: {res.name}
+                      <span
+                        key={idx}
+                        className={`px-2.5 py-1 text-[10px] md:text-[11px] font-bold rounded-lg uppercase tracking-wider border whitespace-nowrap ${
+                          res.color === "Green"
+                            ? "bg-green-900/50 text-green-300 border-green-500/30"
+                            : res.color === "Blue"
+                              ? "bg-blue-900/50 text-blue-300 border-blue-500/30"
+                              : res.color === "Red"
+                                ? "bg-red-900/50 text-red-300 border-red-500/30"
+                                : "bg-pink-900/50 text-pink-300 border-pink-500/30"
+                        }`}
+                      >
+                        {res.color} Ohm: {res.name}
                       </span>
                     );
                   })}
@@ -324,17 +474,27 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
 
                 <div className="w-full text-center relative group">
                   <h3 className="text-sm sm:text-base md:text-lg font-normal text-white mb-6 leading-relaxed tracking-normal break-words inline-block">
-                    {renderHighlightedSentence(currentChunk.vieSentence, currentChunk.resourcesUsed)}
+                    {renderHighlightedSentence(
+                      currentChunk.vieSentence,
+                      currentChunk.resourcesUsed,
+                    )}
                   </h3>
-                  <button 
+                  <button
                     onClick={playVietnamese}
                     className="ml-3 p-2 rounded-full border border-white/10 hover:bg-white/10 text-white/50 hover:text-white transition-all inline-flex items-center align-middle"
-                    title={currentChunk.vieAudioUrl ? "Play AI Audio (VI)" : "Play basic TTS (VI)"}
+                    title={
+                      currentChunk.vieAudioUrl
+                        ? "Play AI Audio (VI)"
+                        : "Play basic TTS (VI)"
+                    }
                   >
-                    {currentChunk.vieAudioUrl ? <Play className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    {currentChunk.vieAudioUrl ? (
+                      <Play className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
-                
 
                 <div className="relative flex flex-col items-center justify-center w-full shrink-0">
                   <AnimatePresence>
@@ -348,7 +508,10 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-black/80 border-r border-b border-white/10 rotate-45"></div>
                         <div className="flex items-center justify-center gap-3">
                           <p className="text-sm md:text-base font-medium text-white/90 leading-relaxed break-words">
-                            {renderHighlightedSentence(currentChunk.engSentence, currentChunk.resourcesUsed)}
+                            {renderHighlightedSentence(
+                              currentChunk.engSentence,
+                              currentChunk.resourcesUsed,
+                            )}
                           </p>
                         </div>
                       </motion.div>
@@ -356,9 +519,16 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
                   </AnimatePresence>
 
                   <div className="flex items-center justify-center gap-4 md:gap-6 bg-white/5 backdrop-blur-sm px-6 py-3 rounded-full border border-white/10">
-                    <div className="flex items-center gap-2 text-red-500 font-mono" title="Sentence Energy Value">
-                      <span className="font-extrabold text-lg md:text-xl">{currentChunk.rTotal}</span>
-                      <span className="text-xs md:text-sm uppercase tracking-widest opacity-80 font-medium">Ohm</span>
+                    <div
+                      className="flex items-center gap-2 text-red-500 font-mono"
+                      title="Sentence Energy Value"
+                    >
+                      <span className="font-extrabold text-lg md:text-xl">
+                        {currentChunk.rTotal}
+                      </span>
+                      <span className="text-xs md:text-sm uppercase tracking-widest opacity-80 font-medium">
+                        Ohm
+                      </span>
                     </div>
 
                     <div className="w-px h-6 bg-white/20 rounded-full"></div>
@@ -366,18 +536,30 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
                     <div className="flex items-center gap-2 md:gap-3">
                       <button
                         onClick={() => setShowEnglish(!showEnglish)}
-                        className={`p-2.5 md:p-3 rounded-full transition-all group relative ${showEnglish ? 'text-white bg-white/20 shadow-inner' : 'text-white/50 hover:text-white hover:bg-white/10'}`}
+                        className={`p-2.5 md:p-3 rounded-full transition-all group relative ${showEnglish ? "text-white bg-white/20 shadow-inner" : "text-white/50 hover:text-white hover:bg-white/10"}`}
                         title="Translate to English"
                       >
-                        {showEnglish ? <EyeOff className="w-5 h-5 md:w-6 md:h-6" /> : <Eye className="w-5 h-5 md:w-6 md:h-6" />}
+                        {showEnglish ? (
+                          <EyeOff className="w-5 h-5 md:w-6 md:h-6" />
+                        ) : (
+                          <Eye className="w-5 h-5 md:w-6 md:h-6" />
+                        )}
                       </button>
-                      
-                      <button 
+
+                      <button
                         onClick={playEnglish}
                         className="p-2.5 md:p-3 rounded-full transition-all text-white/50 hover:text-white hover:bg-white/10"
-                        title={currentChunk.audioUrl ? "Play AI Audio (EN)" : "Play basic TTS (EN)"}
+                        title={
+                          currentChunk.audioUrl
+                            ? "Play AI Audio (EN)"
+                            : "Play basic TTS (EN)"
+                        }
                       >
-                        {currentChunk.audioUrl ? <Play className="w-5 h-5 md:w-6 md:h-6" /> : <Volume2 className="w-5 h-5 md:w-6 md:h-6" />}
+                        {currentChunk.audioUrl ? (
+                          <Play className="w-5 h-5 md:w-6 md:h-6" />
+                        ) : (
+                          <Volume2 className="w-5 h-5 md:w-6 md:h-6" />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -390,7 +572,7 @@ export default function PlayerTab({ chunks, loading }: { chunks: Chunk[], loadin
               </div>
             )}
           </AnimatePresence>
-          
+
           {/* Navigation */}
           <div className="flex items-center space-x-3 md:space-x-8 mt-4 border-t border-white/10 pt-4 w-full max-w-md mx-auto justify-center shrink-0">
             <button
