@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { getDocWithCache } from "../services/cacheService";
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
 import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2, Zap } from 'lucide-react';
 import Papa from 'papaparse';
@@ -8,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { rawNuanceData } from '../data/nuanceData';
 import { generateChunk } from '../services/aiService';
 
-export default function ResourcesTab({ resources, loading }: { resources: Resource[], loading: boolean }) {
+export default function ResourcesTab({ resources, loading, setResources }: { resources: Resource[], loading: boolean, setResources: React.Dispatch<React.SetStateAction<Resource[]>> }) {
   const [name, setName] = useState('');
   const [hint, setHint] = useState('');
   const [color, setColor] = useState<ColorCategory>('Green');
@@ -61,7 +62,7 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
     const loadOhms = async () => {
       try {
         const docRef = doc(db, 'workspaces/default/settings', 'baseOhms');
-        const snap = await getDoc(docRef);
+        const snap = await getDocWithCache(docRef, 'resources_base_ohms', 1000 * 60 * 60);
         if (snap.exists()) {
           setBaseOhms(prev => ({ ...prev, ...(snap.data() as Record<ColorCategory, number>) }));
         }
@@ -171,7 +172,7 @@ export default function ResourcesTab({ resources, loading }: { resources: Resour
       
       let aiSettings: AISettings | undefined;
       const settingsDocRef = doc(db, `workspaces/default/settings`, 'ai');
-      const docSnap = await getDoc(settingsDocRef);
+      const docSnap = await getDocWithCache(settingsDocRef, 'resources_ai_settings', 1000 * 60 * 60);
       if (docSnap.exists()) {
         aiSettings = docSnap.data() as AISettings;
       }

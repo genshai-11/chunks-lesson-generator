@@ -23,6 +23,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
+import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
 import Papa from "papaparse";
 
 interface CsvRow {
@@ -78,23 +79,28 @@ export default function CVRMeasureTab({
 
   React.useEffect(() => {
     if (!auth.currentUser) return;
-    const q = query(
-      collection(db, "workspaces/default/cvr_history"),
-      orderBy("createdAt", "desc"),
-      limit(20),
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const hist = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setHistory(hist);
-    });
-    return () => unsubscribe();
+    const fetchHistory = async () => {
+      try {
+        const q = query(
+          collection(db, "workspaces/default/cvr_history"),
+          orderBy("createdAt", "desc"),
+          limit(20)
+        );
+        const snapshot = await getDocsWithCache(q, "cvr_history", 1000 * 60 * 5);
+        const hist = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        setHistory(hist);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchHistory();
   }, []);
 
   const getSettings = async (): Promise<AISettings | undefined> => {
     if (!auth.currentUser) return undefined;
     try {
       const docRef = doc(db, "workspaces/default/settings", "ai");
-      const docSnap = await getDoc(docRef);
+      const docSnap = await getDocWithCache(docRef, "cvr_ai_settings", 1000 * 60 * 60);
       if (docSnap.exists()) return docSnap.data() as AISettings;
     } catch (e) {
       console.error(e);
@@ -106,7 +112,7 @@ export default function CVRMeasureTab({
     if (!auth.currentUser) return undefined;
     try {
       const docRef = doc(db, "workspaces/default/settings", "baseOhms");
-      const docSnap = await getDoc(docRef);
+      const docSnap = await getDocWithCache(docRef, "cvr_base_ohms", 1000 * 60 * 60);
       if (docSnap.exists()) return docSnap.data() as Record<string, number>;
     } catch (e) {
       console.error(e);

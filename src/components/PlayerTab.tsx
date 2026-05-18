@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { Chunk } from "../types";
+import { getDocsWithCache } from "../services/cacheService";
 import {
   Filter,
   ChevronLeft,
@@ -26,30 +27,30 @@ export default function PlayerTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      query(
-        collection(db, `workspaces/default/chunks`),
-        orderBy("createdAt", "desc"),
-        limit(500),
-      ),
-      (snapshot) => {
+    const fetchChunks = async () => {
+      try {
+        const q = query(
+          collection(db, `workspaces/default/chunks`),
+          orderBy("createdAt", "desc"),
+          limit(100),
+        );
+        const snapshot = await getDocsWithCache(q, "player_chunks", 1000 * 60 * 5); // 5 minute cache
         const chunkData: Chunk[] = [];
-        snapshot.forEach((doc) =>
-          chunkData.push({ id: doc.id, ...doc.data() } as Chunk),
+        snapshot.forEach((docSnap) =>
+          chunkData.push({ id: docSnap.id, ...docSnap.data() } as Chunk),
         );
         setChunks(chunkData);
         setLoading(false);
-      },
-      (error) => {
+      } catch (error) {
         handleFirestoreError(
           error,
           OperationType.LIST,
           `workspaces/default/chunks`,
         );
         setLoading(false);
-      },
-    );
-    return () => unsub();
+      }
+    };
+    fetchChunks();
   }, []);
   // Filters
   const [selectedCategory, setSelectedCategory] = useState<string>("all");

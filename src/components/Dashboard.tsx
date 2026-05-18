@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { Resource, Chunk, AISettings } from "../types";
+import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
 import {
   LogOut,
   Database,
@@ -51,48 +52,55 @@ export default function Dashboard() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    // Listen to Resources
-    const unsubResources = onSnapshot(
-      query(
-        collection(db, `workspaces/default/resources`),
-        orderBy("createdAt", "desc"),
-      ),
-      (snapshot) => {
+    // Load Resources via Cache
+    const fetchResources = async () => {
+      try {
+        const q = query(
+          collection(db, `workspaces/default/resources`),
+          orderBy("createdAt", "desc"),
+          limit(50)
+        );
+        const snapshot = await getDocsWithCache(q, "dashboard_resources", 1000 * 60 * 10);
         const resData: Resource[] = [];
-        snapshot.forEach((doc) =>
-          resData.push({ id: doc.id, ...doc.data() } as Resource),
+        snapshot.forEach((docSnap) =>
+          resData.push({ id: docSnap.id, ...docSnap.data() } as Resource),
         );
         setResources(resData);
         setLoading(false);
-      },
-      (error) =>
+      } catch (error) {
         handleFirestoreError(
           error,
           OperationType.LIST,
           `workspaces/default/resources`,
-        ),
-    );
+        );
+        setLoading(false);
+      }
+    };
+    fetchResources();
 
-    // Remove global chunks listener to prevent DB overload
-    // Each tab handles its own chunks loading
-    const unsubSettings = onSnapshot(
-      doc(db, `workspaces/default/settings`, "ai"),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setAiSettings(snapshot.data() as AISettings);
+    // Settings
+    const fetchSettings = async () => {
+      try {
+        const docSnap = await getDocWithCache(
+          doc(db, `workspaces/default/settings`, "ai"),
+          "dashboard_ai_settings",
+          1000 * 60 * 60 // 1 hour cache
+        );
+        if (docSnap.exists()) {
+          setAiSettings(docSnap.data() as AISettings);
         }
-      },
-      (error) =>
+      } catch (error) {
         handleFirestoreError(
           error,
           OperationType.GET,
-          `workspaces/default/settings/ai`,
-        ),
-    );
+          `workspaces/default/settings/ai`
+        );
+      }
+    };
+    fetchSettings();
 
     return () => {
-      unsubResources();
-      unsubSettings();
+      // unsubSettings();
     };
   }, []);
 
@@ -255,7 +263,7 @@ export default function Dashboard() {
       >
         <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-300">
           {activeTab === "resources" && (
-            <ResourcesTab resources={resources} loading={loading} />
+            <ResourcesTab resources={resources} loading={loading} setResources={setResources} />
           )}
           {activeTab === "mixer" && (
             <MixerTab resources={resources} aiSettings={aiSettings} />

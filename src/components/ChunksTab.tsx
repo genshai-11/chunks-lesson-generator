@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
   collection,
-  onSnapshot,
   deleteDoc,
   doc,
   updateDoc,
@@ -17,6 +16,7 @@ import {
   QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType } from "../firebase";
+import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
 import { Chunk, AISettings } from "../types";
 import {
   Trash2,
@@ -53,10 +53,21 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
   useEffect(() => {
     const fetchTotal = async () => {
       try {
+        const cachedCount = sessionStorage.getItem("chunktab_total_count");
+        const cachedTime = sessionStorage.getItem("chunktab_total_count_time");
+        const now = Date.now();
+        if (cachedCount && cachedTime && now - parseInt(cachedTime) < 1000 * 60 * 60) {
+          setTotalChunks(parseInt(cachedCount));
+          return;
+        }
+
         const snapshot = await getCountFromServer(
           collection(db, `workspaces/default/chunks`),
         );
-        setTotalChunks(snapshot.data().count);
+        const count = snapshot.data().count;
+        setTotalChunks(count);
+        sessionStorage.setItem("chunktab_total_count", count.toString());
+        sessionStorage.setItem("chunktab_total_count_time", now.toString());
       } catch (err) {
         console.error("Error fetching count:", err);
       }
@@ -96,48 +107,30 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
           }
         }
 
-        // We use onSnapshot for the CURRENT PAGE to keep it real-time!
-        const unsub = onSnapshot(
-          q,
-          (snapshot) => {
-            const chunkData: Chunk[] = [];
-            snapshot.forEach((docSnap) =>
-              chunkData.push({ id: docSnap.id, ...docSnap.data() } as Chunk),
-            );
-            setChunks(chunkData);
-
-            if (!snapshot.empty) {
-              // Save cursor for the NEXT page
-              setPageCursors((prev) => ({
-                ...prev,
-                [currentPage + 1]: snapshot.docs[snapshot.docs.length - 1],
-              }));
-            }
-            setLoading(false);
-          },
-          (error) => {
-            handleFirestoreError(
-              error,
-              OperationType.LIST,
-              `workspaces/default/chunks`,
-            );
-            setLoading(false);
-          },
+        // Use getDocsWithCache to save quota!
+        const snapshot = await getDocsWithCache(q, `chunktab_page_${currentPage}`, 1000 * 60 * 5);
+        
+        const chunkData: Chunk[] = [];
+        snapshot.forEach((docSnap) =>
+          chunkData.push({ id: docSnap.id, ...docSnap.data() } as Chunk),
         );
+        setChunks(chunkData);
 
-        return () => unsub();
+        if (!snapshot.empty) {
+          // Save cursor for the NEXT page
+          setPageCursors((prev) => ({
+            ...prev,
+            [currentPage + 1]: snapshot.docs[snapshot.docs.length - 1],
+          }));
+        }
+        setLoading(false);
       } catch (error) {
         console.error(error);
         setLoading(false);
       }
     };
 
-    const cleanup = fetchPage();
-    return () => {
-      cleanup.then((unsub) => {
-        if (unsub) unsub();
-      });
-    };
+    fetchPage();
   }, [currentPage, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(totalChunks / pageSize));
@@ -237,6 +230,8 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
     if (!auth.currentUser) return;
     try {
       await deleteDoc(doc(db, `workspaces/default/chunks`, id));
+      setChunks((prev) => prev.filter((c) => c.id !== id));
+      setTotalChunks((prev) => prev - 1);
     } catch (error) {
       handleFirestoreError(
         error,
@@ -275,6 +270,8 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
             await currentBatch.commit();
           }
 
+          setChunks((prev) => prev.filter((c) => !selectedIds.has(c.id)));
+          setTotalChunks((prev) => Math.max(0, prev - selectedIds.size));
           setSelectedIds(new Set());
           showToast(`Successfully deleted ${count} chunks.`);
         } catch (error) {
@@ -340,7 +337,7 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
   const getLatestAiSettings = async () => {
     try {
       const docRef = doc(db, `workspaces/default/settings`, "ai");
-      const docSnap = await getDoc(docRef);
+      const docSnap = await getDocWithCache(docRef, "cvr_ai_settings", 1000 * 60 * 60);
       if (docSnap.exists()) {
         return docSnap.data() as AISettings;
       }
@@ -370,6 +367,11 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
           doc(db, `workspaces/default/chunks`, chunk.id),
           updateData,
         );
+        
+        setChunks(prev => prev.map(c => 
+          c.id === chunk.id ? { ...c, ...updateData } : c
+        ));
+
         showToast("Audio generated successfully");
       }
     } catch (error: any) {
@@ -478,6 +480,10 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
             doc(db, `workspaces/default/chunks`, chunk.id),
             updateData,
           );
+          
+          setChunks(prev => prev.map(c => 
+            c.id === chunk.id ? { ...c, ...updateData } : c
+          ));
           successCount++;
         }
       } catch (error: any) {
