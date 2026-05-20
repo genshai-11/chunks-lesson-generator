@@ -183,17 +183,18 @@ export default function CVRMeasureTab({
     }
     setStatus("analyzing");
     try {
-      const [settings, baseOhms, tcCorrections] = await Promise.all([
+      const [settings, baseOhms, tcCorrections, freshResources] = await Promise.all([
         getSettings(),
         getBaseOhms(),
         dataClient.getTcCorrections().catch(() => []),
+        dataClient.getResources().catch(() => resources ?? []),
       ]);
       if (baseOhms) setBaseOhmsState(baseOhms as Record<string, number>);
       const analysisResult = await measureCVR(
         textToAnalyze,
         settings,
         baseOhms,
-        resources,
+        freshResources,
         tcCorrections,
       );
       setResult(analysisResult);
@@ -332,8 +333,11 @@ export default function CVRMeasureTab({
           return;
         }
 
-        const settings = await getSettings();
-        const baseOhms = await getBaseOhms();
+        const [settings, baseOhms, freshResources] = await Promise.all([
+          getSettings(),
+          getBaseOhms(),
+          dataClient.getResources().catch(() => resources ?? []),
+        ]);
         const outList: CsvResultRow[] = [];
 
         setBatchProgress({ current: 0, total: rows.length });
@@ -345,7 +349,7 @@ export default function CVRMeasureTab({
               row.Transcript,
               settings,
               baseOhms,
-              resources,
+              freshResources,
             );
             const actual = Number(row.ActualCVR) || 0;
             const pred = res.predictedCVR || 0;

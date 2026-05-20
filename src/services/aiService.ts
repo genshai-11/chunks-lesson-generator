@@ -138,9 +138,10 @@ export async function measureCVR(
   // Strip punctuation and extra spaces for robust matching against transcript typos
   const stripPunctuation = (str: string) =>
     str
+      .normalize("NFC")
       .toLowerCase()
       .replace(/[\s\u200B-\u200D\uFEFF]+/g, " ")
-      .replace(/[.,!?;:"\\'(){}\[\]<>—\-]/g, "")
+      .replace(/[.,!?;:"‘’“”\\'(){}\[\]<>—-]/g, "")
       .trim();
   const trStripped = stripPunctuation(transcript);
 
