@@ -1060,11 +1060,8 @@ export async function generateAutoChunks(
     hint: r.hint,
   }));
 
-  const formulaType = settings?.formulaType || "sum";
   const physicsLogic =
-    formulaType === "sum"
-      ? `- R_total = Sum of all individual resource Ohms (R1 + R2 + R3 + ...). (Example: 5 + 9 + 3 = 17)`
-      : `- R_total = Sum(R) for same-color series, then Product of those sums for different colors.`;
+    `- R_total = Sum of all individual resource Ohms (R1 + R2 + R3 + ...). Color does not change the math. Example: Pink + Pink + Green = PinkOhm + PinkOhm + GreenOhm.`;
 
   const prompt = `
 You are a Master Linguistic Architect for the "CHUNKS" EdTech system.

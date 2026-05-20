@@ -176,30 +176,12 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
 
   const calculateOhm = (usedResources: Resource[]) => {
     if (usedResources.length === 0) return 0;
-    
-    const formulaType = aiSettings?.formulaType || 'sum';
 
-    if (formulaType === 'sum') {
-      // Linear Sum Formula: R1 + R2 + R3...
-      const totalOhm = usedResources.reduce((sum, r) => sum + r.ohm, 0);
-      return Math.round(totalOhm * 10) / 10;
-    } else {
-      // Circuit Formula (Series-Parallel):
-      // Same color = ADD (Series)
-      // Different colors = MULTIPLY (Parallel)
-      const groups: Record<string, number[]> = {};
-      usedResources.forEach(r => {
-        if (!groups[r.color]) groups[r.color] = [];
-        groups[r.color].push(r.ohm);
-      });
-      
-      const colorSums = Object.values(groups).map(group => 
-        group.reduce((sum, ohm) => sum + ohm, 0)
-      );
-      
-      const totalOhm = colorSums.reduce((prod, val) => prod * val, 1);
-      return Math.round(totalOhm * 10) / 10;
-    }
+    // TC/R is always a linear sum of all selected resource Ohms.
+    // Color only identifies resource type; it must never change the math.
+    // Example: Pink + Pink + Green = PinkOhm + PinkOhm + GreenOhm.
+    const totalOhm = usedResources.reduce((sum, r) => sum + r.ohm, 0);
+    return Math.round(totalOhm * 10) / 10;
   };
 
   const handleSentenceLengthSelect = (len: SentenceLength) => {

@@ -69,9 +69,8 @@ export default function SettingsTab() {
               'Long': { maxSentences: 5, maxWords: 100 }
             };
           }
-          if (!data.formulaType) {
-            data.formulaType = 'sum';
-          }
+          // TC/R is always a linear sum of resource Ohms. Force legacy values like "words" back to sum.
+          data.formulaType = 'sum';
           if (!data.complexityMultipliers) {
             data.complexityMultipliers = {
               'Very Short': 1,
@@ -129,7 +128,7 @@ export default function SettingsTab() {
     try {
       await dataClient.setSetting('ai', {
         ...settings,
-        formulaType: settings.formulaType || 'sum',
+        formulaType: 'sum',
         ohmBaseValues: settings.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 },
         complexityMultipliers: settings.complexityMultipliers || {
           'Very Short': 1,
@@ -1066,14 +1065,12 @@ export default function SettingsTab() {
                 <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center">
                   <Calculator className="w-4 h-4 mr-2 text-gray-400" /> Formula Type
                 </label>
-                <select
-                  value={settings.formulaType || 'sum'}
-                  onChange={(e) => setSettings({ ...settings, formulaType: e.target.value as any })}
-                  className="w-full max-w-xs rounded-xl border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-3 text-sm bg-gray-50/50"
-                >
-                  <option value="sum">Sum (Characters)</option>
-                  <option value="words">Words</option>
-                </select>
+                <div className="w-full max-w-xs rounded-xl border border-gray-200 p-3 text-sm bg-gray-50/50 text-gray-700 font-medium">
+                  Sum TC — cộng tất cả resource Ohm, không nhân theo màu
+                </div>
+                <p className="mt-2 text-xs text-gray-400">
+                  Example: Pink + Pink + Green = PinkOhm + PinkOhm + GreenOhm. Color only identifies resource type.
+                </p>
               </div>
 
               <div className="pt-6 border-t border-gray-100">
