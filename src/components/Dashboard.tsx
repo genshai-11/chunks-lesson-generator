@@ -1,16 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { logOut, auth, handleFirestoreError, OperationType } from "../firebase";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-  doc,
-} from "firebase/firestore";
-import { db } from "../firebase";
-import { Resource, Chunk, AISettings } from "../types";
-import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
+import { logOut, auth } from "../firebase";
+import { Resource, AISettings } from "../types";
+import { dataClient } from "../services/dataClient";
 import {
   LogOut,
   Database,
@@ -40,9 +31,30 @@ type TabType =
   | "measure"
   | "settings";
 
+const VALID_TABS: readonly TabType[] = ["resources", "mixer", "chunks", "player", "measure", "settings"];
+
+function tabFromPath(): TabType {
+  const seg = window.location.pathname.replace(/^\//, "").split("/")[0];
+  return VALID_TABS.includes(seg as TabType) ? (seg as TabType) : "resources";
+}
+
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<TabType>("resources");
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromPath);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const navigateTo = (tab: TabType) => {
+    setActiveTab(tab);
+    const path = `/${tab}`;
+    if (window.location.pathname !== path) {
+      window.history.pushState({ tab }, "", path);
+    }
+  };
+
+  useEffect(() => {
+    const onPop = () => setActiveTab(tabFromPath());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // Lifted State
   const [resources, setResources] = useState<Resource[]>([]);
@@ -52,56 +64,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    // Load Resources via Cache
-    const fetchResources = async () => {
+    const loadBootstrap = async () => {
       try {
-        const q = query(
-          collection(db, `workspaces/default/resources`),
-          orderBy("createdAt", "desc"),
-          limit(50)
-        );
-        const snapshot = await getDocsWithCache(q, "dashboard_resources", 1000 * 60 * 10);
-        const resData: Resource[] = [];
-        snapshot.forEach((docSnap) =>
-          resData.push({ id: docSnap.id, ...docSnap.data() } as Resource),
-        );
-        setResources(resData);
-        setLoading(false);
+        const bootstrap = await dataClient.getDashboardBootstrap();
+        setResources(bootstrap.resources || []);
+        setAiSettings(bootstrap.aiSettings as AISettings | undefined);
       } catch (error) {
-        handleFirestoreError(
-          error,
-          OperationType.LIST,
-          `workspaces/default/resources`,
-        );
+        console.error('Failed to load dashboard bootstrap:', error);
+      } finally {
         setLoading(false);
       }
     };
-    fetchResources();
 
-    // Settings
-    const fetchSettings = async () => {
-      try {
-        const docSnap = await getDocWithCache(
-          doc(db, `workspaces/default/settings`, "ai"),
-          "dashboard_ai_settings",
-          1000 * 60 * 60 // 1 hour cache
-        );
-        if (docSnap.exists()) {
-          setAiSettings(docSnap.data() as AISettings);
-        }
-      } catch (error) {
-        handleFirestoreError(
-          error,
-          OperationType.GET,
-          `workspaces/default/settings/ai`
-        );
-      }
-    };
-    fetchSettings();
-
-    return () => {
-      // unsubSettings();
-    };
+    loadBootstrap();
   }, []);
 
   const tabs = [
@@ -181,7 +156,7 @@ export default function Dashboard() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigateTo(tab.id)}
                 title={isCollapsed ? tab.label : undefined}
                 className={`w-full flex items-center py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isCollapsed ? "justify-center px-0" : "px-3"
@@ -240,7 +215,7 @@ export default function Dashboard() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigateTo(tab.id)}
                 className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${
                   isActive
                     ? "text-red-600"

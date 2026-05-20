@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, doc, onSnapshot, addDoc, query, limit } from 'firebase/firestore';
-import { db } from '../firebase';
 import { Resource, AISettings } from '../types';
 import { Send, Loader2, Sparkles, ChevronDown, MessageSquare } from 'lucide-react';
 import { generateAutoChunks } from '../services/aiService';
+import { dataClient } from '../services/dataClient';
 
 interface Message {
   id: string;
@@ -63,14 +62,18 @@ If they just want to chat or it is ambiguous, output normal text response (no JS
 NOTE: If they specify ohm value, map it to targetU. Quantity to quantity. Topic to theme. Use their language.
 User: ${userMessage}`;
 
-      const response = await fetch('/api/ai/chat', {
+      const endpoint = aiSettings.endpoint || 'https://openrouter.ai/api/v1';
+      const chatEndpoint = `${endpoint.replace(/\/+$/, "")}/chat/completions`;
+
+      const response = await fetch(chatEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${aiSettings.apiKey || aiSettings.geminiApiKey || 'default'}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "CHUNKS CVR",
         },
         body: JSON.stringify({
-          endpoint: aiSettings.endpoint || 'https://openrouter.ai/api/v1',
           model: aiSettings.primaryModel || 'google/gemini-2.5-flash',
           stream: false,
           messages: [{ role: 'user', content: prompt }]
@@ -125,10 +128,9 @@ User: ${userMessage}`;
         let successCount = 0;
         for (const chunk of generated) {
           try {
-            await addDoc(collection(db, `workspaces/default/chunks`), {
+            await dataClient.createChunk({
               ...chunk,
-              createdAt: Date.now(),
-              reviewed: false
+              createdAt: new Date().toISOString(),
             });
             successCount++;
           } catch (e) {

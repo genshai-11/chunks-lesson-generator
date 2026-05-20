@@ -1,23 +1,7 @@
 import React, { useState, useEffect } from "react";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  updateDoc,
-  getDoc,
-  writeBatch,
-  query,
-  orderBy,
-  limit,
-  getCountFromServer,
-  startAfter,
-  getDocs,
-  DocumentData,
-  QueryDocumentSnapshot,
-} from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType } from "../firebase";
-import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
+import { auth } from "../firebase";
 import { Chunk, AISettings } from "../types";
+import { dataClient } from "../services/dataClient";
 import {
   Trash2,
   Volume2,
@@ -41,91 +25,20 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Pagination State
   const [pageSize, setPageSize] = useState<number>(20);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalChunks, setTotalChunks] = useState<number>(0);
-  const [pageCursors, setPageCursors] = useState<{
-    [page: number]: QueryDocumentSnapshot<DocumentData> | null;
-  }>({ 1: null });
 
-  // Fetch Total Count
-  useEffect(() => {
-    const fetchTotal = async () => {
-      try {
-        const cachedCount = sessionStorage.getItem("chunktab_total_count");
-        const cachedTime = sessionStorage.getItem("chunktab_total_count_time");
-        const now = Date.now();
-        if (cachedCount && cachedTime && now - parseInt(cachedTime) < 1000 * 60 * 60) {
-          setTotalChunks(parseInt(cachedCount));
-          return;
-        }
-
-        const snapshot = await getCountFromServer(
-          collection(db, `workspaces/default/chunks`),
-        );
-        const count = snapshot.data().count;
-        setTotalChunks(count);
-        sessionStorage.setItem("chunktab_total_count", count.toString());
-        sessionStorage.setItem("chunktab_total_count_time", now.toString());
-      } catch (err) {
-        console.error("Error fetching count:", err);
-      }
-    };
-    fetchTotal();
-  }, []);
-
-  // Fetch Page
   useEffect(() => {
     const fetchPage = async () => {
       setLoading(true);
       try {
-        let q = query(
-          collection(db, `workspaces/default/chunks`),
-          orderBy("createdAt", "desc"),
-          limit(pageSize),
-        );
-
-        if (currentPage > 1 && pageCursors[currentPage]) {
-          q = query(q, startAfter(pageCursors[currentPage]));
-        } else if (currentPage > 1 && !pageCursors[currentPage]) {
-          // Fallback: if we jump without cursor, we have to fetch all up to this point
-          const skipQ = query(
-            collection(db, `workspaces/default/chunks`),
-            orderBy("createdAt", "desc"),
-            limit((currentPage - 1) * pageSize),
-          );
-          const skipSnap = await getDocs(skipQ);
-          if (!skipSnap.empty) {
-            const lastVisible = skipSnap.docs[skipSnap.docs.length - 1];
-            q = query(
-              collection(db, `workspaces/default/chunks`),
-              orderBy("createdAt", "desc"),
-              startAfter(lastVisible),
-              limit(pageSize),
-            );
-          }
-        }
-
-        // Use getDocsWithCache to save quota!
-        const snapshot = await getDocsWithCache(q, `chunktab_page_${currentPage}`, 1000 * 60 * 5);
-        
-        const chunkData: Chunk[] = [];
-        snapshot.forEach((docSnap) =>
-          chunkData.push({ id: docSnap.id, ...docSnap.data() } as Chunk),
-        );
-        setChunks(chunkData);
-
-        if (!snapshot.empty) {
-          // Save cursor for the NEXT page
-          setPageCursors((prev) => ({
-            ...prev,
-            [currentPage + 1]: snapshot.docs[snapshot.docs.length - 1],
-          }));
-        }
-        setLoading(false);
+        const result = await dataClient.getChunksPage(currentPage, pageSize);
+        setChunks(result.data);
+        setTotalChunks(result.total);
       } catch (error) {
         console.error(error);
+      } finally {
         setLoading(false);
       }
     };
@@ -229,15 +142,12 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
   const handleDelete = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      await deleteDoc(doc(db, `workspaces/default/chunks`, id));
+      await dataClient.deleteChunk(id);
       setChunks((prev) => prev.filter((c) => c.id !== id));
       setTotalChunks((prev) => prev - 1);
     } catch (error) {
-      handleFirestoreError(
-        error,
-        OperationType.DELETE,
-        `workspaces/default/chunks/${id}`,
-      );
+      console.error(error);
+      showToast('Failed to delete chunk.');
     }
   };
 
@@ -251,29 +161,12 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
         setConfirmModal(null);
         setIsDeletingBulk(true);
         try {
-          const batchSize = 400;
-          let count = 0;
-          let currentBatch = writeBatch(db);
-
-          for (const id of selectedIds) {
-            const docRef = doc(db, `workspaces/default/chunks`, id);
-            currentBatch.delete(docRef);
-            count++;
-
-            if (count % batchSize === 0) {
-              await currentBatch.commit();
-              currentBatch = writeBatch(db);
-            }
-          }
-
-          if (count % batchSize !== 0) {
-            await currentBatch.commit();
-          }
-
+          const result = await dataClient.bulkDeleteChunks(Array.from(selectedIds));
           setChunks((prev) => prev.filter((c) => !selectedIds.has(c.id)));
           setTotalChunks((prev) => Math.max(0, prev - selectedIds.size));
           setSelectedIds(new Set());
-          showToast(`Successfully deleted ${count} chunks.`);
+          const deletedCount = Number((result as any).count ?? result);
+          showToast(`Successfully deleted ${deletedCount} chunks.`);
         } catch (error) {
           console.error("Error bulk deleting chunks:", error);
           showToast("Failed to delete chunks.");
@@ -336,11 +229,7 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
 
   const getLatestAiSettings = async () => {
     try {
-      const docRef = doc(db, `workspaces/default/settings`, "ai");
-      const docSnap = await getDocWithCache(docRef, "cvr_ai_settings", 1000 * 60 * 60);
-      if (docSnap.exists()) {
-        return docSnap.data() as AISettings;
-      }
+      return (await dataClient.getSetting<AISettings>('ai')) || undefined;
     } catch (error) {
       console.error("Error loading AI settings:", error);
     }
@@ -363,10 +252,7 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
         if (engAudioUrl) updateData.audioUrl = engAudioUrl;
         if (vieAudioUrl) updateData.vieAudioUrl = vieAudioUrl;
 
-        await updateDoc(
-          doc(db, `workspaces/default/chunks`, chunk.id),
-          updateData,
-        );
+        await dataClient.updateChunk(chunk.id, updateData);
         
         setChunks(prev => prev.map(c => 
           c.id === chunk.id ? { ...c, ...updateData } : c
@@ -476,10 +362,7 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
         }
 
         if (Object.keys(updateData).length > 0) {
-          await updateDoc(
-            doc(db, `workspaces/default/chunks`, chunk.id),
-            updateData,
-          );
+          await dataClient.updateChunk(chunk.id, updateData);
           
           setChunks(prev => prev.map(c => 
             c.id === chunk.id ? { ...c, ...updateData } : c
@@ -592,7 +475,6 @@ export default function ChunksTab({ aiSettings }: { aiSettings?: AISettings }) {
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
                   setCurrentPage(1);
-                  setPageCursors({ 1: null }); // Reset cursors on page size change
                 }}
                 className="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-700"
               >

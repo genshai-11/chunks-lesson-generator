@@ -1,14 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  limit,
-} from "firebase/firestore";
-import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { Chunk } from "../types";
-import { getDocsWithCache } from "../services/cacheService";
+import { dataClient } from "../services/dataClient";
 import {
   Filter,
   ChevronLeft,
@@ -29,24 +21,11 @@ export default function PlayerTab() {
   useEffect(() => {
     const fetchChunks = async () => {
       try {
-        const q = query(
-          collection(db, `workspaces/default/chunks`),
-          orderBy("createdAt", "desc"),
-          limit(100),
-        );
-        const snapshot = await getDocsWithCache(q, "player_chunks", 1000 * 60 * 5); // 5 minute cache
-        const chunkData: Chunk[] = [];
-        snapshot.forEach((docSnap) =>
-          chunkData.push({ id: docSnap.id, ...docSnap.data() } as Chunk),
-        );
+        const chunkData = await dataClient.getChunks(100);
         setChunks(chunkData);
-        setLoading(false);
       } catch (error) {
-        handleFirestoreError(
-          error,
-          OperationType.LIST,
-          `workspaces/default/chunks`,
-        );
+        console.error('Failed to load chunks for player:', error);
+      } finally {
         setLoading(false);
       }
     };

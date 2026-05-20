@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { auth } from '../firebase';
 import { AISettings } from '../types';
 import { fetchOpenRouterModels } from '../services/aiService';
 import { generateAudio } from '../services/audioService';
+import { dataClient } from '../services/dataClient';
+import { exportFirebaseWorkspace } from '../services/firebaseMigrationService';
 import { Settings, Save, Loader2, RefreshCw, Key, Globe, Layers, Volume2, Sparkles, Eye, EyeOff, Copy, Mic, Calculator, Scale, Bot, Play } from 'lucide-react';
 
 export default function SettingsTab() {
@@ -31,7 +32,8 @@ export default function SettingsTab() {
       'Short': 1.5,
       'Medium': 2,
       'Long': 2.5
-            }
+    },
+    ohmBaseValues: { Green: 5, Blue: 7, Red: 9, Pink: 3 }
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,6 +47,7 @@ export default function SettingsTab() {
   const [previewText, setPreviewText] = useState('Hello, this is a test of the selected voice.');
   const [previewLang, setPreviewLang] = useState<'eng' | 'vie'>('eng');
   const [showM2MKey, setShowM2MKey] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<string>('');
 
   const [activeSubTab, setActiveSubTab] = useState<'ai' | 'audio' | 'ohm' | 'api'>('ai');
 
@@ -53,11 +56,8 @@ export default function SettingsTab() {
 
     const loadSettings = async () => {
       try {
-        const docRef = doc(db, `workspaces/default/settings`, 'ai');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data() as AISettings;
-          // Migration: Update old voice ID if found
+        const data = await dataClient.getSetting<AISettings>('ai');
+        if (data) {
           if (data.elevenLabsVoiceId === 'pNInz6obpg8ndclKuztW') {
             data.elevenLabsVoiceId = '21m00Tcm4TlvDq8ikWAM';
           }
@@ -78,9 +78,12 @@ export default function SettingsTab() {
               'Short': 1.5,
               'Medium': 2,
               'Long': 2.5
-            }
+            };
           }
-          setSettings(data);
+          if (!data.ohmBaseValues) {
+            data.ohmBaseValues = { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+          }
+          setSettings((prev) => ({ ...prev, ...data }));
         }
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -96,17 +99,7 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, `workspaces/default/settings`, 'ai');
-      await setDoc(docRef, {
-        endpoint: settings.endpoint,
-        apiKey: settings.apiKey,
-        primaryModel: settings.primaryModel,
-        fallbackModel: settings.fallbackModel,
-        sentenceConstraints: settings.sentenceConstraints,
-        geminiApiKey: settings.geminiApiKey || null,
-        enableChatbot: !!settings.enableChatbot,
-        audioTranscriptModel: settings.audioTranscriptModel || null,
-      }, { merge: true });
+      await dataClient.setSetting('ai', { ...settings, enableChatbot: !!settings.enableChatbot });
       alert('AI Configuration saved successfully!');
     } catch (error) {
       console.error('Error saving AI settings:', error);
@@ -120,26 +113,7 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, `workspaces/default/settings`, 'ai');
-      
-      const updateData: any = {
-        ttsProvider: settings.ttsProvider || 'elevenlabs',
-        elevenLabsApiKey: settings.elevenLabsApiKey ?? null,
-        elevenLabsModel: settings.elevenLabsModel ?? null,
-        elevenLabsVoiceId: settings.elevenLabsVoiceId ?? null,
-        deepgramApiKey: settings.deepgramApiKey ?? null,
-        deepgramModel: settings.deepgramModel ?? null,
-      };
-
-      if (settings.nineRouterUrl !== undefined) updateData.nineRouterUrl = settings.nineRouterUrl ?? null;
-      if (settings.nineRouterApiKey !== undefined) updateData.nineRouterApiKey = settings.nineRouterApiKey ?? null;
-      if (settings.nineRouterEngVoice !== undefined) updateData.nineRouterEngVoice = settings.nineRouterEngVoice ?? null;
-      if (settings.nineRouterVieVoice !== undefined) updateData.nineRouterVieVoice = settings.nineRouterVieVoice ?? null;
-
-      // Remove any remaining undefined values just to be 100% sure
-      Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-
-      await setDoc(docRef, updateData, { merge: true });
+      await dataClient.setSetting('ai', { ...settings, ttsProvider: settings.ttsProvider || 'elevenlabs' });
       alert('Audio Configuration saved successfully!');
     } catch (error) {
       console.error('Error saving audio settings:', error);
@@ -153,9 +127,10 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, 'workspaces/default/settings', 'ai');
-      await setDoc(docRef, {
+      await dataClient.setSetting('ai', {
+        ...settings,
         formulaType: settings.formulaType || 'sum',
+        ohmBaseValues: settings.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 },
         complexityMultipliers: settings.complexityMultipliers || {
           'Very Short': 1,
           'Short': 1.5,
@@ -167,7 +142,7 @@ export default function SettingsTab() {
           { maxCvr: 20, min: 1.0, max: 1.7 },
           { maxCvr: 9999, min: 1.4, max: 2.0 }
         ]
-      }, { merge: true });
+      });
       alert('Ohm Rules Configuration saved successfully!');
     } catch (error) {
       console.error('Error saving Ohm Rules settings:', error);
@@ -181,10 +156,7 @@ export default function SettingsTab() {
     if (!auth.currentUser) return;
     setSaving(true);
     try {
-      const docRef = doc(db, `workspaces/default/settings`, 'ai');
-      await setDoc(docRef, {
-        m2mApiKey: settings.m2mApiKey,
-      }, { merge: true });
+      await dataClient.setSetting('ai', { ...settings, m2mApiKey: settings.m2mApiKey });
       alert('API Configuration saved successfully!');
     } catch (error) {
       console.error('Error saving API settings:', error);
@@ -198,6 +170,22 @@ export default function SettingsTab() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const randomKey = Array.from({ length: 32 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
     setSettings({ ...settings, m2mApiKey: `m2m_${randomKey}` });
+  };
+
+  const handleImportFirebaseToSupabase = async () => {
+    if (!auth.currentUser) return;
+    setMigrationStatus('Reading Firebase workspace...');
+    try {
+      const payload = await exportFirebaseWorkspace();
+      setMigrationStatus('Importing into Supabase...');
+      const result = await dataClient.importFirebasePayload(payload);
+      setMigrationStatus(`Import completed. Resources: ${result.resources || 0}, Chunks: ${result.chunks || 0}, History: ${result.cvrHistory || 0}`);
+      alert('Firebase data imported into Supabase successfully.');
+    } catch (error) {
+      console.error('Firebase import failed:', error);
+      setMigrationStatus(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(`Firebase import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleFetchModels = async () => {
@@ -264,13 +252,39 @@ export default function SettingsTab() {
     }
     setFetchingVoices(true);
     try {
-      const providerParam = nineRouterFilterProvider ? `&provider=${nineRouterFilterProvider}` : '';
-      const response = await fetch(`/api/tts/9router/voices?endpoint=${encodeURIComponent(settings.nineRouterUrl)}${providerParam}`, {
-        headers: settings.nineRouterApiKey ? {
-          'Authorization': `Bearer ${settings.nineRouterApiKey}`,
-        } : undefined,
-      });
+      // Endpoint normalization logic
+      let endpoint = settings.nineRouterUrl.trim().replace(/\/+$/, '');
+      if (endpoint.endsWith('/v1')) {
+        endpoint = endpoint.slice(0, -3);
+      }
       
+      const providerParam = nineRouterFilterProvider ? `?provider=${nineRouterFilterProvider}` : '';
+      const authHeader = settings.nineRouterApiKey ? { 'Authorization': `Bearer ${settings.nineRouterApiKey}` } : {};
+      
+      let targetUrl = `${endpoint}/v1/audio/voices${providerParam}`;
+      let response = await fetch(targetUrl, { headers: authHeader });
+      let usedFallback = false;
+
+      if (!response.ok) {
+        // Fallback to /v1/models/tts
+        let fallbackUrl = `${endpoint}/v1/models/tts`;
+        let fbResponse = await fetch(fallbackUrl, { headers: authHeader });
+        
+        if (fbResponse.ok) {
+           response = fbResponse;
+           usedFallback = true;
+        } else {
+           // Fallback to /v1/models
+           fallbackUrl = `${endpoint}/v1/models`;
+           fbResponse = await fetch(fallbackUrl, { headers: authHeader });
+           
+           if (fbResponse.ok) {
+             response = fbResponse;
+             usedFallback = true;
+           }
+        }
+      }
+
       if (!response.ok) {
         let errMessage = response.statusText;
         try {
@@ -281,7 +295,18 @@ export default function SettingsTab() {
       }
       
       const data = await response.json();
-      setNineRouterVoices(data.data || []);
+      let voices = data.data || [];
+
+      // Adapt the models array to our voice expected format if the fallback was used
+      if (usedFallback && Array.isArray(voices)) {
+        voices = voices.map((m: any) => ({
+          model: m.id || m.model || '',
+          name: m.name || m.id || m.model || 'Default Voice',
+          provider: m.provider || (m.id && m.id.includes('/') ? m.id.split('/')[0] : 'unknown')
+        }));
+      }
+
+      setNineRouterVoices(voices);
     } catch (error: any) {
       console.error('Error fetching 9Router voices:', error);
       const isFailedToFetch = error.message === 'Failed to fetch';
@@ -1052,6 +1077,39 @@ export default function SettingsTab() {
               </div>
 
               <div className="pt-6 border-t border-gray-100">
+                <h4 className="text-sm font-bold text-gray-900 mb-1 flex items-center">
+                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> Base Ohm Values
+                </h4>
+                <p className="text-xs text-gray-400 mb-4">Điểm ohm gốc cho từng màu chunk. Giá trị này được dùng làm nền tảng tính toán ohm score.</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {([
+                    { key: 'Green', default: 5, bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-500', text: 'text-green-700', focus: 'focus:border-green-500 focus:ring-green-500', label: '🟢 Green' },
+                    { key: 'Blue',  default: 7, bg: 'bg-blue-50',  border: 'border-blue-200',  badge: 'bg-blue-500',  text: 'text-blue-700',  focus: 'focus:border-blue-500 focus:ring-blue-500',   label: '🔵 Blue' },
+                    { key: 'Red',   default: 9, bg: 'bg-red-50',   border: 'border-red-200',   badge: 'bg-red-500',   text: 'text-red-700',   focus: 'focus:border-red-500 focus:ring-red-500',     label: '🔴 Red' },
+                    { key: 'Pink',  default: 3, bg: 'bg-pink-50',  border: 'border-pink-200',  badge: 'bg-pink-400',  text: 'text-pink-700',  focus: 'focus:border-pink-500 focus:ring-pink-500',   label: '🩷 Pink' },
+                  ] as const).map(({ key, default: def, bg, border, badge, text, focus, label }) => (
+                    <div key={key} className={`p-4 rounded-xl border-2 ${border} ${bg} flex flex-col items-center gap-2`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${badge}`}>{label}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={settings.ohmBaseValues?.[key] ?? def}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          ohmBaseValues: {
+                            ...(settings.ohmBaseValues || { Green: 5, Blue: 7, Red: 9, Pink: 3 }),
+                            [key]: Number(e.target.value)
+                          }
+                        })}
+                        className={`w-full text-center rounded-lg border ${border} shadow-sm ${focus} p-2 text-2xl font-black ${text} bg-white`}
+                      />
+                      <span className="text-[10px] text-gray-400 uppercase tracking-widest">Base Ohm</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
                 <h4 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
                   <Scale className="w-4 h-4 mr-2 text-gray-400" /> Complexity Multipliers
                 </h4>
@@ -1262,6 +1320,33 @@ export default function SettingsTab() {
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="mb-12 p-6 bg-amber-50/70 rounded-2xl border border-amber-100">
+              <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+                <div>
+                  <h4 className="font-bold text-gray-900">Firebase → Supabase Migration</h4>
+                  <p className="text-xs text-amber-700 mt-1">
+                    One-time import of Firebase workspace data into the new Supabase compatibility tables.
+                  </p>
+                </div>
+                <button
+                  onClick={handleImportFirebaseToSupabase}
+                  disabled={saving || !auth.currentUser}
+                  className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-sm disabled:opacity-50"
+                >
+                  Import Firebase Data
+                </button>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                This reads <code>workspaces/default</code> from Firebase using your current session and imports
+                <code> resources</code>, <code>chunks</code>, <code>cvr_history</code>, <code>settings/ai</code>, and <code>settings/baseOhms</code> into Supabase.
+              </p>
+              {migrationStatus && (
+                <div className="mt-4 px-4 py-3 bg-white border border-amber-200 rounded-xl text-xs text-gray-700 font-medium">
+                  {migrationStatus}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-12">

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signInAnonymously } from 'firebase/auth';
 import { auth } from './firebase';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
@@ -51,8 +51,19 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        try {
+          // Bypass login by signing in anonymously
+          const result = await signInAnonymously(auth);
+          setUser(result.user);
+        } catch (error) {
+          console.error("Auto sign-in failed:", error);
+          setUser(null);
+        }
+      } else {
+        setUser(currentUser);
+      }
       setLoading(false);
     });
 

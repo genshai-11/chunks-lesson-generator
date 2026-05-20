@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, writeBatch, getDoc, setDoc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { getDocWithCache } from "../services/cacheService";
+import { auth } from '../firebase';
 import { Resource, ColorCategory, AISettings, SentenceLength } from '../types';
+import { dataClient } from '../services/dataClient';
 import { Trash2, Plus, Upload, Sparkles, Loader2, Search, Filter, Edit2, Check, X, Settings2, Zap } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -57,21 +56,21 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const refreshResources = async () => {
+    const nextResources = await dataClient.getResources();
+    setResources(nextResources);
+  };
+
   useEffect(() => {
     if (!auth.currentUser) return;
     const loadOhms = async () => {
       try {
-        const docRef = doc(db, 'workspaces/default/settings', 'baseOhms');
-        const snap = await getDocWithCache(docRef, 'resources_base_ohms', 1000 * 60 * 60);
-        if (snap.exists()) {
-          setBaseOhms(prev => ({ ...prev, ...(snap.data() as Record<ColorCategory, number>) }));
+        const data = await dataClient.getSetting<Record<ColorCategory, number>>('baseOhms');
+        if (data) {
+          setBaseOhms(prev => ({ ...prev, ...data }));
         }
       } catch (e: any) {
-        // Silently skip if it's a quota error as it's already handled globally
-        const msg = e?.message?.toLowerCase() || '';
-        if (!msg.includes('quota exceeded') && !msg.includes('resource-exhausted')) {
-          console.error("Failed to load base ohms settings", e);
-        }
+        console.error('Failed to load base ohms settings', e);
       }
     };
     loadOhms();
@@ -81,8 +80,7 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     if (!auth.currentUser) return;
     setSavingOhms(true);
     try {
-      const docRef = doc(db, 'workspaces/default/settings', 'baseOhms');
-      await setDoc(docRef, baseOhms, { merge: true });
+      await dataClient.setSetting('baseOhms', baseOhms as Record<string, number>);
       showToast('Base Ohms saved successfully.');
       setShowSettings(false);
     } catch (e) {
@@ -170,12 +168,7 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     try {
       const selectedResources = resources.filter(r => selectedIds.has(r.id));
       
-      let aiSettings: AISettings | undefined;
-      const settingsDocRef = doc(db, `workspaces/default/settings`, 'ai');
-      const docSnap = await getDocWithCache(settingsDocRef, 'resources_ai_settings', 1000 * 60 * 60);
-      if (docSnap.exists()) {
-        aiSettings = docSnap.data() as AISettings;
-      }
+      const aiSettings = (await dataClient.getSetting<AISettings>('ai')) || undefined;
       
       if (!aiSettings) {
         throw new Error("AI Settings not found. Please configure them in the Settings tab.");
@@ -222,7 +215,7 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
           createdAt: new Date().toISOString()
         };
         
-        await addDoc(collection(db, `workspaces/default/chunks`), chunkData);
+        await dataClient.createChunk(chunkData);
       }
       
       setSelectedIds(new Set());
@@ -248,29 +241,14 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
         setConfirmModal(null);
         setProcessing(true);
         try {
-          const batchSize = 400;
-          let count = 0;
-          let currentBatch = writeBatch(db);
-
-          for (const id of selectedIds) {
-            const docRef = doc(db, `workspaces/default/resources`, id);
-            currentBatch.delete(docRef);
-            count++;
-
-            if (count % batchSize === 0) {
-              await currentBatch.commit();
-              currentBatch = writeBatch(db);
-            }
-          }
-
-          if (count % batchSize !== 0) {
-            await currentBatch.commit();
-          }
-
+          const count = await dataClient.bulkDeleteResources(Array.from(selectedIds));
+          await refreshResources();
           setSelectedIds(new Set());
-          showToast(`Deleted ${count} resources.`);
+          const deletedCount = Number((count as any).count ?? count);
+          showToast(`Deleted ${deletedCount} resources.`);
         } catch (error) {
-          handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
+          console.error(error);
+          showToast('Failed to delete resources.');
         } finally {
           setProcessing(false);
         }
@@ -283,27 +261,12 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     
     setProcessing(true);
     try {
-      const batchSize = 400;
-      let count = 0;
-      let currentBatch = writeBatch(db);
-
-      for (const res of resources) {
-        const docRef = doc(db, `workspaces/default/resources`, res.id);
-        currentBatch.delete(docRef);
-        count++;
-
-        if (count % batchSize === 0) {
-          await currentBatch.commit();
-          currentBatch = writeBatch(db);
-        }
-      }
-
-      if (count % batchSize !== 0) {
-        await currentBatch.commit();
-      }
+      await dataClient.bulkDeleteResources(resources.map((res) => res.id));
+      await refreshResources();
       setShowClearConfirm(false);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
+      console.error(error);
+      showToast('Failed to clear resources.');
     } finally {
       setProcessing(false);
     }
@@ -314,15 +277,12 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     
     setProcessing(true);
     try {
-      const batch = writeBatch(db);
-      selectedIds.forEach(id => {
-        const docRef = doc(db, `workspaces/default/resources`, id);
-        batch.update(docRef, { color: newColor });
-      });
-      await batch.commit();
+      await dataClient.bulkUpdateResources(Array.from(selectedIds), { color: newColor });
+      await refreshResources();
       setSelectedIds(new Set());
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
+      console.error(error);
+      showToast('Failed to update resource colors.');
     } finally {
       setProcessing(false);
     }
@@ -349,27 +309,12 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
 
     setProcessing(true);
     try {
-      const batchSize = 400;
-      let count = 0;
-      let currentBatch = writeBatch(db);
-
-      for (const id of duplicates) {
-        const docRef = doc(db, `workspaces/default/resources`, id);
-        currentBatch.delete(docRef);
-        count++;
-
-        if (count % batchSize === 0) {
-          await currentBatch.commit();
-          currentBatch = writeBatch(db);
-        }
-      }
-
-      if (count % batchSize !== 0) {
-        await currentBatch.commit();
-      }
+      await dataClient.bulkDeleteResources(duplicates);
+      await refreshResources();
       showToast(`Removed ${duplicates.length} duplicates.`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources`);
+      console.error(error);
+      showToast('Failed to remove duplicates.');
     } finally {
       setProcessing(false);
     }
@@ -385,34 +330,13 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
         setConfirmModal(null);
         setProcessing(true);
         try {
-          const batchSize = 400;
-          let count = 0;
-          let currentBatch = writeBatch(db);
-
-          for (const res of resources) {
-            let newOhm = res.ohm;
-            if (baseOhms[res.color] !== undefined) {
-              newOhm = baseOhms[res.color];
-            }
-
-            if (newOhm !== res.ohm) {
-              const docRef = doc(db, `workspaces/default/resources`, res.id);
-              currentBatch.update(docRef, { ohm: newOhm });
-              count++;
-
-              if (count % batchSize === 0) {
-                await currentBatch.commit();
-                currentBatch = writeBatch(db);
-              }
-            }
-          }
-
-          if (count % batchSize !== 0) {
-            await currentBatch.commit();
-          }
-          showToast(`Successfully updated Ohms for ${count} resources.`);
+          const changedResources = resources.filter((res) => baseOhms[res.color] !== undefined && baseOhms[res.color] !== res.ohm);
+          await Promise.all(changedResources.map((res) => dataClient.updateResource(res.id, { ohm: baseOhms[res.color] } as Partial<Resource>)));
+          await refreshResources();
+          showToast(`Successfully updated Ohms for ${changedResources.length} resources.`);
         } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources`);
+          console.error(error);
+          showToast('Failed to update ohms.');
         } finally {
           setProcessing(false);
         }
@@ -425,7 +349,7 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     if (!name || !color || ohm === '' || !auth.currentUser) return;
 
     try {
-      await addDoc(collection(db, `workspaces/default/resources`), {
+      await dataClient.createResource({
         name,
         color,
         ohm: Number(ohm),
@@ -433,21 +357,25 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
         userId: auth.currentUser.uid,
         createdAt: new Date().toISOString()
       });
+      await refreshResources();
       setName('');
       setHint('');
       setOhm('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `workspaces/default/resources`);
+      console.error(error);
+      showToast('Failed to create resource.');
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!auth.currentUser) return;
     try {
-      await deleteDoc(doc(db, `workspaces/default/resources`, id));
+      await dataClient.deleteResource(id);
+      await refreshResources();
       setShowDeleteConfirm(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `workspaces/default/resources/${id}`);
+      console.error(error);
+      showToast('Failed to delete resource.');
     }
   };
 
@@ -465,17 +393,18 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     if (!editingId || !auth.currentUser || !editData.name || editData.ohm === undefined) return;
 
     try {
-      const docRef = doc(db, `workspaces/default/resources`, editingId);
-      await updateDoc(docRef, {
+      await dataClient.updateResource(editingId, {
         name: editData.name,
         color: editData.color,
         ohm: Number(editData.ohm),
         hint: editData.hint || ''
       });
+      await refreshResources();
       setEditingId(null);
       setEditData({});
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `workspaces/default/resources/${editingId}`);
+      console.error(error);
+      showToast('Failed to update resource.');
     }
   };
 
@@ -598,30 +527,15 @@ export default function ResourcesTab({ resources, loading, setResources }: { res
     setImporting(true);
 
     try {
-      const batchSize = 400;
-      let currentBatch = writeBatch(db);
-      let count = 0;
-
-      for (const res of stagedResources) {
-        const docRef = doc(collection(db, `workspaces/default/resources`));
-        currentBatch.set(docRef, {
-          ...res,
-          userId: auth.currentUser.uid,
-          createdAt: new Date().toISOString()
-        });
-        count++;
-
-        if (count % batchSize === 0) {
-          await currentBatch.commit();
-          currentBatch = writeBatch(db);
-        }
-      }
-
-      if (count % batchSize !== 0) {
-        await currentBatch.commit();
-      }
-
-      showToast(`Successfully imported ${count} resources!`);
+      const payload = stagedResources.map((res) => ({
+        ...res,
+        userId: auth.currentUser.uid,
+        createdAt: new Date().toISOString()
+      }));
+      const result = await dataClient.bulkCreateResources(payload as Partial<Resource>[]);
+      await refreshResources();
+      const importedCount = Number((result as any).count ?? result);
+      showToast(`Successfully imported ${importedCount} resources!`);
       setStagedResources([]);
     } catch (error) {
       console.error("Confirm import error:", error);

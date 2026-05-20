@@ -5,7 +5,7 @@ export async function generateAudio(text: string, settings?: AISettings, lang: '
     const provider = settings?.ttsProvider || 'elevenlabs';
 
     if (provider === '9router') {
-      const url = settings?.nineRouterUrl;
+      let url = settings?.nineRouterUrl;
       const apiKey = settings?.nineRouterApiKey;
       const model = lang === 'vie' ? settings?.nineRouterVieVoice : settings?.nineRouterEngVoice;
 
@@ -16,30 +16,38 @@ export async function generateAudio(text: string, settings?: AISettings, lang: '
         throw new Error(`9Router ${lang === 'vie' ? 'Vietnamese' : 'English'} Voice Model not configured`);
       }
 
-      const response = await fetch(`/api/tts/9router/speech`, {
+      // Endpoint normalization logic
+      url = url.trim().replace(/\/+$/, '');
+      if (url.endsWith('/v1')) {
+        url = url.slice(0, -3);
+      }
+      // Note: We don't force HTTPS here because the user might be using a local HTTP server
+      const targetUrl = `${url}/v1/audio/speech`;
+
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify({
-          endpoint: url,
           model,
           input: text,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to generate audio with 9Router: ${errorData.error || response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to generate audio with 9Router: ${errorText || response.statusText}`);
       }
 
-      const data = await response.json();
-      if (!data.audioContent) {
-        throw new Error('No audio content received from proxy');
-      }
-
-      return `data:audio/mp3;base64,${data.audioContent}`;
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     }
 
     if (provider === 'deepgram') {

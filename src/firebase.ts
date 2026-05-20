@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth';
 import { 
   getFirestore, 
   initializeFirestore, 
@@ -21,6 +21,10 @@ export const auth = getAuth();
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
   try {
+    if (window.location.hostname === 'localhost') {
+      await signInWithRedirect(auth, provider);
+      return;
+    }
     await signInWithPopup(auth, provider);
   } catch (error) {
     console.error("Error signing in with Google", error);

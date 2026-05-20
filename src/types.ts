@@ -1,4 +1,4 @@
-export type ColorCategory = 'Green' | 'Blue' | 'Pink' | 'Red' | 'Yellow' | 'Orange' | 'Purple';
+export type ColorCategory = 'Green' | 'Blue' | 'Pink' | 'Red';
 
 export type SentenceLength = 'Very Short' | 'Short' | 'Medium' | 'Long';
 

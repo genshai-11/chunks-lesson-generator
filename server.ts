@@ -3,7 +3,29 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import {
+  bulkCreateResources,
+  bulkDeleteChunks,
+  bulkDeleteResources,
+  bulkUpdateResources,
+  createChunk,
+  createHistory,
+  createResource,
+  deleteChunk,
+  deleteResource,
+  getChunks,
+  getChunksPage,
+  getDashboardBootstrap,
+  getHistory,
+  getResources,
+  getSetting,
+  importFirebasePayload,
+  setSetting,
+  updateChunk,
+  updateResource,
+} from './src/services/serverSupabase';
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,38 +60,27 @@ async function startServer() {
 
   // 1. Validation for M2M (Machine-to-Machine)
   const validateApiKey = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    // If it's a browser request (has owner cookie), allow it for the main UI
-    if (req.headers.cookie && req.headers.cookie.includes('__Secure-')) return next();
-
     const providedKey = req.headers['x-api-key'] || req.query.apiKey;
     const isM2M = req.headers['accept'] === 'application/json' || req.headers['x-requested-with'] === 'XMLHttpRequest';
-    
-    // Log for debugging (visible in server logs)
+
     console.log(`[API Request] Path: ${req.path}, M2M: ${isM2M}, HasKey: ${!!providedKey}`);
 
     try {
-      const { doc, getDoc } = await import('firebase/firestore');
-      const { db } = await import('./src/firebase');
-      const docRef = doc(db, `workspaces/default/settings`, 'ai');
-      const docSnap = await getDoc(docRef);
-      const appApiKey = docSnap.exists() ? docSnap.data().m2mApiKey : null;
+      const aiSettings = await getSetting('ai').catch(() => null) as any;
+      const appApiKey = aiSettings && typeof aiSettings === 'object' ? aiSettings.m2mApiKey : null;
+      const fallbackKey = process.env.M2M_API_KEY || 'm2m_CHUNK_ANALYZER_SECURE_2026';
 
-      if (appApiKey && providedKey === appApiKey) {
+      if ((appApiKey && providedKey === appApiKey) || (providedKey && providedKey === fallbackKey)) {
         return next();
       }
 
-      // Hardcoded fallback for the specific key you requested
-      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') {
-        return next();
-      }
-
-      return res.status(401).json({ 
-        status: 'error', 
-        error: 'Unauthorized. Valid X-API-Key is required for M2M.' 
+      return res.status(401).json({
+        status: 'error',
+        error: 'Unauthorized. Valid X-API-Key is required for M2M.'
       });
     } catch (error) {
-      if (providedKey === 'm2m_CHUNK_ANALYZER_SECURE_2026') return next();
-      next();
+      if (providedKey && providedKey === (process.env.M2M_API_KEY || 'm2m_CHUNK_ANALYZER_SECURE_2026')) return next();
+      return res.status(500).json({ status: 'error', error: 'Failed to validate API key.' });
     }
   };
 
@@ -437,124 +448,212 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     }
   });
 
-  // Resources API
-  app.get('/api/resources', validateApiKey, async (req, res) => {
+  app.get('/api/app/bootstrap', async (_req, res) => {
     try {
-      const { collection, getDocs, query, limit, orderBy } = await import('firebase/firestore');
-      const { db } = await import('./src/firebase');
-      
+      res.json(await getDashboardBootstrap());
+    } catch (error: any) {
+      console.error('API Bootstrap Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/resources', async (req, res) => {
+    try {
       const maxLimit = parseInt(req.query.limit as string) || 100;
-      
-      const q = query(
-        collection(db, 'workspaces/default/resources'), 
-        orderBy('createdAt', 'desc'),
-        limit(maxLimit)
-      );
-      
-      const snapshot = await getDocs(q);
-      const resources = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      res.json({
-        status: 'success',
-        count: resources.length,
-        data: resources
-      });
+      res.json(await getResources(maxLimit));
     } catch (error: any) {
       console.error('API Resources Error:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
-  // Chunks API
-  app.get('/api/chunks', validateApiKey, async (req, res) => {
+  app.post('/api/resources/bulk-delete', async (req, res) => {
     try {
-      const { collection, getDocs, query, limit, orderBy } = await import('firebase/firestore');
-      const { db } = await import('./src/firebase');
-      
-      const maxLimit = parseInt(req.query.limit as string) || 50;
-      
-      const q = query(
-        collection(db, 'workspaces/default/chunks'), 
-        orderBy('createdAt', 'desc'),
-        limit(maxLimit)
-      );
-      
-      const snapshot = await getDocs(q);
-      const chunks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      res.json({
-        status: 'success',
-        count: chunks.length,
-        data: chunks
-      });
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      res.json({ count: await bulkDeleteResources(ids) });
     } catch (error: any) {
-      console.error('API Chunks Error:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      console.error('API Bulk Delete Resources Error:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
-  // Add a new Resource externally
-  app.post('/api/resources', validateApiKey, async (req, res) => {
+  app.post('/api/resources/bulk-update', async (req, res) => {
     try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('./src/firebase');
-      
-      const { text, type, category, authorId, color, tc } = req.body;
-      
-      if (!text) {
-        return res.status(400).json({ status: 'error', message: 'Text is required' });
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const patch = req.body?.patch || {};
+      res.json({ count: await bulkUpdateResources(ids, patch) });
+    } catch (error: any) {
+      console.error('API Bulk Update Resources Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/resources/bulk-create', async (req, res) => {
+    try {
+      const resources = Array.isArray(req.body?.resources) ? req.body.resources : [];
+      res.json({ count: await bulkCreateResources(resources) });
+    } catch (error: any) {
+      console.error('API Bulk Create Resources Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/resources', async (req, res) => {
+    try {
+      const { text, name, hint, color, tc, authorId, userId, createdAt } = req.body;
+      const resourceName = name || text;
+      if (!resourceName) {
+        return res.status(400).json({ error: 'Resource name is required' });
       }
 
-      const docRef = await addDoc(collection(db, 'workspaces/default/resources'), {
-        text,
-        type: type || 'Sentence',
-        category: category || 'Default',
-        authorId: authorId || 'API_USER',
+      const resource = await createResource({
+        name: resourceName,
+        hint: hint || '',
         color: color || 'Green',
-        tc: tc || null,
-        createdAt: serverTimestamp(),
+        ohm: req.body.ohm ?? tc ?? 0,
+        userId: userId || authorId || 'API_USER',
+        createdAt: createdAt || new Date().toISOString(),
       });
-      
-      res.json({
-        status: 'success',
-        id: docRef.id,
-        message: 'Resource created successfully'
-      });
+
+      res.json(resource);
     } catch (error: any) {
       console.error('API Post Resource Error:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      res.status(500).json({ error: error.message });
     }
   });
 
-  // Add a new Chunk externally
-  app.post('/api/chunks', validateApiKey, async (req, res) => {
+  app.patch('/api/resources/:id', async (req, res) => {
     try {
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-      const { db } = await import('./src/firebase');
-      
-      const { engSentence, vieSentence, resourcesUsed, authorId, length } = req.body;
-      
+      res.json(await updateResource(req.params.id, req.body || {}));
+    } catch (error: any) {
+      console.error('API Patch Resource Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/resources/:id', async (req, res) => {
+    try {
+      await deleteResource(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('API Delete Resource Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/chunks', async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const pageSize = parseInt(req.query.pageSize as string) || 20;
+      res.json(await getChunksPage(page, pageSize));
+    } catch (error: any) {
+      console.error('API Chunks Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/chunks/all', async (req, res) => {
+    try {
+      const maxLimit = parseInt(req.query.limit as string) || 100;
+      res.json(await getChunks(maxLimit));
+    } catch (error: any) {
+      console.error('API Chunks All Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/chunks/bulk-delete', async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      res.json({ count: await bulkDeleteChunks(ids) });
+    } catch (error: any) {
+      console.error('API Bulk Delete Chunks Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/chunks', async (req, res) => {
+    try {
+      const { engSentence, vieSentence } = req.body;
       if (!engSentence || !vieSentence) {
-        return res.status(400).json({ status: 'error', message: 'engSentence and vieSentence are required' });
+        return res.status(400).json({ error: 'engSentence and vieSentence are required' });
       }
 
-      const docRef = await addDoc(collection(db, 'workspaces/default/chunks'), {
-        engSentence,
-        vieSentence,
-        resourcesUsed: resourcesUsed || [],
-        authorId: authorId || 'API_USER',
-        length: length || 'Medium',
-        createdAt: serverTimestamp(),
+      const chunk = await createChunk({
+        ...req.body,
+        userId: req.body.userId || req.body.authorId || 'API_USER',
+        createdAt: req.body.createdAt || new Date().toISOString(),
       });
-      
-      res.json({
-        status: 'success',
-        id: docRef.id,
-        message: 'Chunk created successfully'
-      });
+
+      res.json(chunk);
     } catch (error: any) {
       console.error('API Post Chunk Error:', error);
-      res.status(500).json({ status: 'error', message: error.message });
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/chunks/:id', async (req, res) => {
+    try {
+      res.json(await updateChunk(req.params.id, req.body || {}));
+    } catch (error: any) {
+      console.error('API Patch Chunk Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/chunks/:id', async (req, res) => {
+    try {
+      await deleteChunk(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('API Delete Chunk Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/history', async (req, res) => {
+    try {
+      const maxLimit = parseInt(req.query.limit as string) || 20;
+      res.json(await getHistory(maxLimit));
+    } catch (error: any) {
+      console.error('API History Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/history', async (req, res) => {
+    try {
+      res.json(await createHistory(req.body || {}));
+    } catch (error: any) {
+      console.error('API Create History Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/settings/:key', async (req, res) => {
+    try {
+      res.json(await getSetting(req.params.key));
+    } catch (error: any) {
+      console.error('API Get Setting Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put('/api/settings/:key', async (req, res) => {
+    try {
+      res.json(await setSetting(req.params.key, req.body?.value ?? null));
+    } catch (error: any) {
+      console.error('API Save Setting Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/migrations/firebase-import', async (req, res) => {
+    try {
+      res.json(await importFirebasePayload(req.body || {}));
+    } catch (error: any) {
+      console.error('API Firebase Import Error:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 

@@ -8,22 +8,13 @@ import {
   Edit2,
   Download,
   FileSpreadsheet,
+  Plus,
+  Check,
 } from "lucide-react";
 import { transcribeAudio, measureCVR, CVRResult } from "../services/aiService";
 import { AISettings, Resource } from "../types";
-import {
-  doc,
-  getDoc,
-  collection,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  onSnapshot,
-  limit,
-} from "firebase/firestore";
-import { db, auth } from "../firebase";
-import { getDocsWithCache, getDocWithCache } from "../services/cacheService";
+import { auth } from "../firebase";
+import { dataClient } from "../services/dataClient";
 import Papa from "papaparse";
 
 interface CsvRow {
@@ -67,6 +58,14 @@ export default function CVRMeasureTab({
   // History State
   const [history, setHistory] = useState<any[]>([]);
 
+  // Candidate save state (per-candidate index)
+  const [savingCandidates, setSavingCandidates] = useState<Record<number, 'saving' | 'saved' | 'error'>>({});
+
+  // TC display mode and local correction state
+  const [useConfirmedTC, setUseConfirmedTC] = useState(false);
+  const [baseOhmsState, setBaseOhmsState] = useState<Record<string, number>>({ Green: 5, Blue: 7, Red: 9, Pink: 3 });
+  const [editingColors, setEditingColors] = useState<Record<number, string>>({});
+
   // Batch Mode State
   const [batchResults, setBatchResults] = useState<CsvResultRow[]>([]);
   const [batchStatus, setBatchStatus] = useState<
@@ -78,16 +77,9 @@ export default function CVRMeasureTab({
   const audioChunks = useRef<Blob[]>([]);
 
   React.useEffect(() => {
-    if (!auth.currentUser) return;
     const fetchHistory = async () => {
       try {
-        const q = query(
-          collection(db, "workspaces/default/cvr_history"),
-          orderBy("createdAt", "desc"),
-          limit(20)
-        );
-        const snapshot = await getDocsWithCache(q, "cvr_history", 1000 * 60 * 5);
-        const hist = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        const hist = await dataClient.getHistory(20);
         setHistory(hist);
       } catch (err) {
         console.error(err);
@@ -96,14 +88,14 @@ export default function CVRMeasureTab({
     fetchHistory();
   }, []);
 
+  // Always fetch fresh from Supabase (same source as Settings tab saves to)
   const getSettings = async (): Promise<AISettings | undefined> => {
     if (!auth.currentUser) return undefined;
     try {
-      const docRef = doc(db, "workspaces/default/settings", "ai");
-      const docSnap = await getDocWithCache(docRef, "cvr_ai_settings", 1000 * 60 * 60);
-      if (docSnap.exists()) return docSnap.data() as AISettings;
+      const data = await dataClient.getSetting<AISettings>('ai');
+      return data || undefined;
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load AI settings from Supabase:', e);
     }
     return undefined;
   };
@@ -111,11 +103,14 @@ export default function CVRMeasureTab({
   const getBaseOhms = async (): Promise<Record<string, number> | undefined> => {
     if (!auth.currentUser) return undefined;
     try {
-      const docRef = doc(db, "workspaces/default/settings", "baseOhms");
-      const docSnap = await getDocWithCache(docRef, "cvr_base_ohms", 1000 * 60 * 60);
-      if (docSnap.exists()) return docSnap.data() as Record<string, number>;
+      // Base ohms are now stored inside the 'ai' settings object
+      const data = await dataClient.getSetting<AISettings>('ai');
+      if (data?.ohmBaseValues) return data.ohmBaseValues as Record<string, number>;
+      // Fallback: try legacy separate key
+      const legacy = await dataClient.getSetting<Record<string, number>>('baseOhms');
+      return legacy || undefined;
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load base ohms from Supabase:', e);
     }
     return undefined;
   };
@@ -188,29 +183,36 @@ export default function CVRMeasureTab({
     }
     setStatus("analyzing");
     try {
-      const settings = await getSettings();
-      const baseOhms = await getBaseOhms();
+      const [settings, baseOhms, tcCorrections] = await Promise.all([
+        getSettings(),
+        getBaseOhms(),
+        dataClient.getTcCorrections().catch(() => []),
+      ]);
+      if (baseOhms) setBaseOhmsState(baseOhms as Record<string, number>);
       const analysisResult = await measureCVR(
         textToAnalyze,
         settings,
         baseOhms,
         resources,
+        tcCorrections,
       );
       setResult(analysisResult);
       setStatus("completed");
 
-      // Auto save to history
-      if (auth.currentUser) {
-        await addDoc(collection(db, "workspaces/default/cvr_history"), {
+      // Auto save to history (Supabase) and refresh list
+      try {
+        const saved = await dataClient.createHistory({
           transcript: textToAnalyze,
           predictedCVR: analysisResult.predictedCVR,
           estimatedTC: analysisResult.tcBreakdown.estimatedTC,
           lcValue: analysisResult.lcBreakdown.lcValue,
           tlValue: analysisResult.tlBreakdown.tlValue,
           matchedNames: analysisResult.tcBreakdown.matchedResources?.map(m => m.text).join(", ") || "",
-          createdAt: serverTimestamp(),
           calculationString: analysisResult.calculationString,
         });
+        setHistory(prev => [saved, ...prev]);
+      } catch (histErr) {
+        console.error("Failed to save CVR history:", histErr);
       }
     } catch (err: any) {
       setError("Analysis failed: " + err.message);
@@ -225,6 +227,77 @@ export default function CVRMeasureTab({
     setResult(null);
     setStatus("idle");
     setError(null);
+    setSavingCandidates({});
+    setEditingColors({});
+    setUseConfirmedTC(false);
+  };
+
+  const handleSaveCandidate = async (candidate: any, idx: number) => {
+    const color = editingColors[idx] || candidate.color;
+    const ohm = baseOhmsState[color] ?? candidate.ohm;
+    setSavingCandidates(prev => ({ ...prev, [idx]: 'saving' }));
+    try {
+      await dataClient.createResource({ name: candidate.text, color, ohm });
+      // Save correction for AI learning
+      dataClient.saveTcCorrection({
+        sentence_fragment: candidate.text,
+        resource_name: candidate.text,
+        color,
+        ohm,
+        context: transcript.slice(0, 120),
+      }).catch(() => {});
+      setSavingCandidates(prev => ({ ...prev, [idx]: 'saved' }));
+    } catch (e) {
+      console.error('Failed to save candidate resource:', e);
+      setSavingCandidates(prev => ({ ...prev, [idx]: 'error' }));
+    }
+  };
+
+  const applyToTC = (candidate: any, idx: number) => {
+    if (!result) return;
+    const color = editingColors[idx] || candidate.color;
+    const ohm = baseOhmsState[color] ?? candidate.ohm;
+    const promoted = { ...candidate, color, ohm, type: 'matched' };
+
+    const newMatched = [...result.tcBreakdown.matchedResources, promoted];
+    const newCandidates = result.tcBreakdown.candidateResources.filter((_, i) => i !== idx);
+    const newConfirmedTC = newMatched.reduce((acc: number, r: any) => acc + r.ohm, 0);
+
+    const maxSlots: Record<string, number> = { 'Very Short': 1, 'Short': 2, 'Medium': 3, 'Long': 4 };
+    const band = result.lcBreakdown.lengthBand;
+    const maxAllowed = maxSlots[band] || 4;
+
+    const allRes = [
+      ...newMatched.map((m: any) => ({ ...m, type: 'matched' })),
+      ...newCandidates.map((c: any) => ({ ...c, type: 'candidate' })),
+    ].sort((a, b) => {
+      if (a.type === 'matched' && b.type !== 'matched') return -1;
+      if (a.type !== 'matched' && b.type === 'matched') return 1;
+      return b.ohm - a.ohm;
+    });
+
+    const included = allRes.slice(0, maxAllowed);
+    const overflow = allRes.slice(maxAllowed);
+    const newEstimatedTC = included.reduce((acc: number, r: any) => acc + r.ohm, 0);
+
+    let calcStr = included.map((r: any) => `${r.ohm} (${r.type})`).join(' + ');
+    if (overflow.length > 0) calcStr += ` ... [+${overflow.length} overflow item(s) ignored]`;
+    const calculation = `${calcStr} = ${newEstimatedTC} (Capped at ${maxAllowed} slots for ${band})`;
+
+    setResult(prev => prev ? {
+      ...prev,
+      tcBreakdown: {
+        ...prev.tcBreakdown,
+        matchedResources: newMatched,
+        candidateResources: newCandidates,
+        confirmedTC: newConfirmedTC,
+        estimatedTC: newEstimatedTC,
+        calculation,
+      },
+    } : null);
+
+    setEditingColors(prev => { const n = { ...prev }; delete n[idx]; return n; });
+    setSavingCandidates(prev => { const n = { ...prev }; delete n[idx]; return n; });
   };
 
   const handleManualAnalyze = () => {
@@ -313,6 +386,30 @@ export default function CVRMeasureTab({
 
         setBatchResults(outList);
         setBatchStatus("completed");
+
+        // Save all batch results to Supabase history
+        const newEntries: any[] = [];
+        for (const row of outList) {
+          if (row.Candidates === "ERROR") continue;
+          try {
+            const saved = await dataClient.createHistory({
+              transcript: row.Transcript,
+              predictedCVR: row.PredictedCVR,
+              estimatedTC: row.EstimatedTC,
+              lcValue: row.LC,
+              tlValue: row.TL,
+              matchedNames: row.MatchedNames,
+              calculationString: `${row.EstimatedTC} × ${row.LC} × ${row.TL} = ${row.PredictedCVR}`,
+              payload: { batchActualCVR: row.ActualCVR },
+            });
+            newEntries.push(saved);
+          } catch (e) {
+            console.error("Failed to save batch row to history:", e);
+          }
+        }
+        if (newEntries.length > 0) {
+          setHistory(prev => [...newEntries.reverse(), ...prev]);
+        }
       },
       error: (err) => {
         setError(err.message);
@@ -612,17 +709,32 @@ export default function CVRMeasureTab({
         )}
       </div>
 
-      {activeMode === "single" && result && (
+      {activeMode === "single" && result && (() => {
+        const displayedTC = useConfirmedTC ? result.tcBreakdown.confirmedTC : result.tcBreakdown.estimatedTC;
+        const displayedCVR = Math.round(displayedTC * result.lcBreakdown.lcValue * result.tlBreakdown.tlValue);
+        const displayedCalcStr = `${displayedTC} (TC ${useConfirmedTC ? 'Confirmed' : 'Est.'}) × ${result.lcBreakdown.lcValue} (LC) × ${result.tlBreakdown.tlValue} (TL) = ${displayedCVR}`;
+        return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="col-span-1 md:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-indigo-100 flex flex-col md:flex-row items-center justify-between">
             <div className="mb-4 md:mb-0">
               <h3 className="text-xl font-bold text-gray-900">Predicted CVR</h3>
               <p className="text-sm text-gray-500 font-mono mt-1">
-                {result.calculationString}
+                {displayedCalcStr}
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs ${useConfirmedTC ? 'text-gray-400' : 'font-semibold text-indigo-600'}`}>Estimated</span>
+                <button
+                  onClick={() => setUseConfirmedTC(p => !p)}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${useConfirmedTC ? 'bg-green-500' : 'bg-indigo-400'}`}
+                  title="Toggle between Estimated TC and Confirmed TC only"
+                >
+                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${useConfirmedTC ? 'translate-x-5' : 'translate-x-1'}`} />
+                </button>
+                <span className={`text-xs ${useConfirmedTC ? 'font-semibold text-green-600' : 'text-gray-400'}`}>Confirmed only</span>
+              </div>
             </div>
             <div className="text-5xl font-black text-indigo-600 tracking-tight flex items-center gap-4">
-              {result.predictedCVR}
+              {displayedCVR}
               <button
                 onClick={resetSingleMode}
                 className="text-sm font-medium bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-200"
@@ -635,9 +747,20 @@ export default function CVRMeasureTab({
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-4">
               <h4 className="font-bold text-red-600">TC Breakdown</h4>
-              <span className="font-mono bg-red-50 text-red-700 px-2 rounded">
-                {result.tcBreakdown?.estimatedTC}
-              </span>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[10px] text-gray-400 leading-none">Confirmed</span>
+                  <span className="font-mono bg-green-50 text-green-700 px-2 rounded text-sm">
+                    {result.tcBreakdown?.confirmedTC ?? 0}Ω
+                  </span>
+                </div>
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[10px] text-gray-400 leading-none">Estimated</span>
+                  <span className="font-mono bg-red-50 text-red-700 px-2 rounded text-sm">
+                    {result.tcBreakdown?.estimatedTC}Ω
+                  </span>
+                </div>
+              </div>
             </div>
             <p className="text-xs text-gray-600 mb-3">
               {result.tcBreakdown?.calculation}
@@ -685,24 +808,60 @@ export default function CVRMeasureTab({
                 </h5>
                 <div className="space-y-2">
                   {result.tcBreakdown?.candidateResources?.map(
-                    (c: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className="text-sm border border-red-100 p-2 rounded bg-red-50/50"
-                      >
-                        <div className="flex justify-between mb-1">
-                          <span className="font-bold text-red-900">
-                            {c.text}
-                          </span>
-                          <span className="text-xs px-1 bg-white border border-red-200 rounded text-red-700">
-                            {c.color} {c.ohm}Ω
-                          </span>
+                    (c: any, idx: number) => {
+                      const activeColor = editingColors[idx] || c.color;
+                      const activeOhm = baseOhmsState[activeColor] ?? c.ohm;
+                      const COLOR_OPTIONS = ['Green', 'Blue', 'Red', 'Pink'];
+                      return (
+                        <div
+                          key={idx}
+                          className="text-sm border border-red-100 p-2 rounded bg-red-50/50"
+                        >
+                          <div className="flex justify-between items-start mb-1 gap-1">
+                            <span className="font-bold text-red-900 flex-1 min-w-0">{c.text}</span>
+                            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                              <select
+                                value={activeColor}
+                                onChange={e => setEditingColors(prev => ({ ...prev, [idx]: e.target.value }))}
+                                className="text-xs border border-red-200 rounded bg-white text-red-700 py-0.5 px-1 cursor-pointer"
+                              >
+                                {COLOR_OPTIONS.map(col => (
+                                  <option key={col} value={col}>{col} {baseOhmsState[col] ?? '?'}Ω</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => applyToTC(c, idx)}
+                                className="text-xs px-1.5 py-0.5 bg-green-50 border border-green-300 text-green-700 rounded hover:bg-green-100 flex items-center gap-0.5"
+                                title="Promote to Confirmed TC (local only)"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Apply</span>
+                              </button>
+                              {savingCandidates[idx] === 'saved' ? (
+                                <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded flex items-center" title="Saved to library">
+                                  <Check className="w-3 h-3" />
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleSaveCandidate(c, idx)}
+                                  disabled={savingCandidates[idx] === 'saving'}
+                                  className="text-xs px-1.5 py-0.5 bg-white border border-gray-200 text-gray-500 rounded hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 flex items-center gap-0.5 disabled:opacity-50"
+                                  title={savingCandidates[idx] === 'error' ? 'Save failed — retry?' : 'Save to library + learn'}
+                                >
+                                  {savingCandidates[idx] === 'saving' ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Plus className="w-3 h-3" />
+                                  )}
+                                  <span>Save</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-500 italic">{c.reasoning}</p>
                         </div>
-                        <p className="text-xs text-gray-500 italic">
-                          {c.reasoning}
-                        </p>
-                      </div>
-                    ),
+                      );
+                    },
                   )}
                   {(!result.tcBreakdown?.candidateResources ||
                     result.tcBreakdown.candidateResources.length === 0) && (
@@ -755,7 +914,8 @@ export default function CVRMeasureTab({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {activeMode === "history" && (
         <div className="space-y-4">

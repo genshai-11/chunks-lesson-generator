@@ -121,9 +121,19 @@ export async function measureCVR(
   settings?: AISettings,
   baseOhms?: Record<string, number>,
   resources?: Resource[],
+  tcCorrections?: Array<{sentence_fragment: string, resource_name: string, color: string, ohm: number}>,
 ): Promise<CVRResult> {
-  const ohms = settings?.ohmBaseValues ||
-    baseOhms || { Green: 3, Blue: 5, Red: 7, Pink: 9 };
+  const rawOhms = settings?.ohmBaseValues ||
+    baseOhms || { Green: 5, Blue: 7, Red: 9, Pink: 3 };
+  
+  // Normalize to uppercase for easier AI matching
+  const r = rawOhms as Record<string, number>;
+  const ohms: Record<string, number> = {
+    GREEN: Number(r.Green || r.GREEN || 5),
+    BLUE: Number(r.Blue || r.BLUE || 7),
+    RED: Number(r.Red || r.RED || 9),
+    PINK: Number(r.Pink || r.PINK || 3),
+  };
 
   // Strip punctuation and extra spaces for robust matching against transcript typos
   const stripPunctuation = (str: string) =>
@@ -139,59 +149,60 @@ export async function measureCVR(
 
   if (resources && resources.length > 0) {
     resources.forEach((r) => {
-      // Create variations for slash-separated words
-      const cleaned = r.name.replace(/\.{2,}|…/g, " ").trim();
-      const wordsArr = cleaned.split(/\s+/).filter((w) => w.length > 0);
-      let variations: string[][] = [[]];
-
-      for (const word of wordsArr) {
-        if (word.includes("/")) {
-          const parts = word.split("/");
-          const newVars: string[][] = [];
-          for (const part of parts) {
-            if (part && part.trim() !== "") {
-              for (const v of variations) {
-                newVars.push([...v, part]);
-              }
-            }
-          }
-          if (newVars.length > 0) {
-            // Include a variation that joins the parts if they were meant to be one word?
-            // "Ai/đứa" -> maybe they just meant "Ai" or "đứa"
-            variations = newVars;
-          }
-        } else {
-          for (const v of variations) {
-            v.push(word);
-          }
-        }
-      }
-
-      // Add original name as a whole just in case they meant to literally include "/"
-      const textVariations = variations
-        .map((vArr) => stripPunctuation(vArr.join(" ")).trim())
-        .filter((v) => v.length > 0);
-
-      textVariations.push(stripPunctuation(r.name.replace(/\//g, " ")).trim());
-
-      const uniqueVars = Array.from(new Set(textVariations));
+      // Split by " / " first — resource names use this as an alternative-phrase separator
+      // e.g. "Phiền thiệt!,... / Thiệt là phiền toái,..." → two separate phrases to try
+      const alternatives = r.name.split(/ \/ /);
 
       let isMatch = false;
-      for (const v of uniqueVars) {
-        // Fallback for "Ai" vs "Ai/đứa nào" human shorthand
-        // If the variant is just 1 word but the resource is long, skip it
-        if (
-          v &&
-          v.split(/\s+/).length === 1 &&
-          r.name.trim().split(/[\s/]+/).length >= 3
-        ) {
-          continue; // Skip single word matches for complex resources to prevent false positives
+
+      for (const alt of alternatives) {
+        if (isMatch) break;
+
+        const cleaned = alt.replace(/\.{2,}|…/g, " ").trim();
+        const wordsArr = cleaned.split(/\s+/).filter((w) => w.length > 0);
+        let variations: string[][] = [[]];
+
+        for (const word of wordsArr) {
+          if (word.includes("/")) {
+            // Inline slash: "Ai/đứa" → each side is a separate variant
+            const parts = word.split("/");
+            const newVars: string[][] = [];
+            for (const part of parts) {
+              if (part && part.trim() !== "") {
+                for (const v of variations) {
+                  newVars.push([...v, part]);
+                }
+              }
+            }
+            if (newVars.length > 0) {
+              variations = newVars;
+            }
+          } else {
+            for (const v of variations) {
+              v.push(word);
+            }
+          }
         }
 
-        // Robust word match after stripped punct
-        if (v && (" " + trStripped + " ").includes(" " + v + " ")) {
-          isMatch = true;
-          break;
+        const textVariations = variations
+          .map((vArr) => stripPunctuation(vArr.join(" ")).trim())
+          .filter((v) => v.length > 0);
+
+        textVariations.push(stripPunctuation(alt.replace(/\//g, " ")).trim());
+
+        const uniqueVars = Array.from(new Set(textVariations));
+
+        for (const v of uniqueVars) {
+          const vWordCount = v ? v.split(/\s+/).length : 0;
+          // Skip single-word matches for complex single-alternative resources
+          if (v && vWordCount === 1 && r.name.trim().split(/[\s/]+/).length >= 3) continue;
+          // Skip ≤2-word alternatives from multi-alternative resources (e.g. "Yên tâm" from "Yên chí! / Yên tâm!,...")
+          if (v && vWordCount <= 2 && alternatives.length > 1) continue;
+
+          if (v && (" " + trStripped + " ").includes(" " + v + " ")) {
+            isMatch = true;
+            break;
+          }
         }
       }
 
@@ -212,6 +223,12 @@ export async function measureCVR(
       ? `\n\nCác resources đã match sẵn trong thư viện (Confirmed TC = ${confirmedTC}):\n` +
         matched.map((m) => `- "${m.text}" (${m.color} ${m.ohm}Ω)`).join("\n")
       : `\n\nKhông có resources nào trong thư viện match với đoạn Transcript. (Confirmed TC = 0)`;
+
+  const correctionsStr =
+    tcCorrections && tcCorrections.length > 0
+      ? `\n\n## Lịch sử Corrections đã xác nhận (ưu tiên tham khảo khi gặp cụm từ tương tự):\n` +
+        tcCorrections.slice(0, 20).map((c) => `- "${c.sentence_fragment}" → ${c.color} ${c.ohm}Ω`).join("\n")
+      : "";
 
   const multipliers = settings?.complexityMultipliers || {
     "Very Short": 1,
@@ -256,15 +273,32 @@ export async function measureCVR(
 
   const defaultInstructions = `
 Bạn là CVR Measure Engine. Nhiệm vụ của bạn là phân tích đoạn Transcript tiếng Việt để tìm ra độ khó (CVR) dựa trên 3 yếu tố:
-1. TC (Total Resource Ohm load): Bóc tách các cụm từ (trừ các từ ngữ đã match ở trên) thuộc 4 loại (GREEN ${ohms.Green}, BLUE ${ohms.Blue}, RED ${ohms.Red}, PINK ${ohms.Pink}) làm Resource Candidates.
+
+1. TC (Total Resource Ohm load): Bóc tách các cụm từ (trừ các từ ngữ đã match ở trên) làm Resource Candidates.
+   --- STRICT VOCABULARY MAPPING RULES ---
+   - PINK (${ohms.PINK}Ω): Thuật ngữ then chốt hoặc danh từ cốt lõi (Key Concepts / Technical Terms). Từ vựng mang tính kỹ thuật hoặc định danh cụ thể. Phải từ B1 trở lên — từ quá phổ thông không được xếp PINK. Ví dụ: Dép lào, Ví điện tử.
+   - GREEN (${ohms.GREEN}Ω): Từ đệm, từ nối hoặc từ điều hướng (Discourse Markers / Fillers / Conditioners). Dùng để định hướng câu nói, tạo sự tự nhiên hoặc làm mềm ngữ cảnh. Ví dụ: Tin tui đi, Thành thật mà nói, Nói chung là.
+   - BLUE (${ohms.BLUE}Ω): Khung câu hoặc cấu trúc ngữ pháp (Sentence Frames / Grammatical Skeletons). Các cấu trúc chờ được lấp đầy nội dung. Ví dụ: Cậu nên nhớ rằng..., Tui không ngờ là..., Vấn đề không phải là....
+   - RED (${ohms.RED}Ω): Thành ngữ, ẩn dụ hoặc cách diễn đạt hình ảnh (Idioms / Metaphors / Vivid Expressions). Không mang nghĩa đen, độ phức tạp ngữ nghĩa và văn hóa cao nhất. Ví dụ: Mật ngọt chết ruồi, Cậu tới số rồi, Vắt chân lên cổ.
+   *QUAN TRỌNG: Phân loại theo chức năng ngôn ngữ của cụm từ trong câu, không phải theo độ phổ biến của từ đơn lẻ.*
+
    - Tính Confirmed TC = Tổng Ohm của các resources đã match.
    - Tính Estimated TC = Confirmed TC + Tổng Ohm của các Resource Candidates.
 2. LC (Length-Complexity): Đã được tính toán bằng Engine: ${sentences} câu, ${words} từ => Band: ${selectedBand}, Multiplier: ${lcValue}. Không cần tính lại.
-3. TL (Topic/Vocabulary Level): Đánh giá toàn bộ câu và chủ đề trên rải điểm 1.0 đến 2.0 (bước 0.1). 
-   - A1-A2 (1.0-1.2): Giao tiếp cơ bản hàng ngày (chào hỏi, thời tiết, hoạt động thường ngày, từ vựng rất phổ biến).
-   - B1-B2 (1.3-1.7): Chủ đề phổ thông mở rộng đến các vấn đề xã hội (quan điểm cá nhân, công việc, du lịch, giải trí, môi trường). Sử dụng từ vựng đa dạng, có tính diễn đạt tốt nhưng không quá hàn lâm hay hiếm gặp.
-   - B2-C1 (1.8-2.0): Chủ đề rất khó, tính khái quát cao, học thuật hoặc chuyên ngành sâu (chiến lược vĩ mô, triết học, nghiên cứu khoa học, luật học, y khoa). Bắt buộc phải chứa nhiều từ vựng cấp độ cao (advanced/rare), thuật ngữ chuyên ngành (jargon).
-   *Lưu ý: TL phải suy luận ngược lại khắt khe giống hệt quy tắc LLM đã dùng để generate (The Mixer). Điểm 1.8 - 2.0 (B2-C1) RẤT KHÓ đạt được, trừ phi câu mang đậm tính học thuật hàn lâm hoặc chuyên ngành hẹp.*
+3. TL (Topic/Vocabulary Level): Đánh giá toàn bộ câu và chủ đề trên rải điểm 1.0 đến 2.0 (bước 0.1).
+
+   *** ĐIỂM 1.0 LÀ CÓ THẬT — PHẢI DÙNG khi câu đủ điều kiện, KHÔNG được dùng 1.2 như một "điểm an toàn mặc định" ***
+
+   - A1 (1.0): Câu sinh hoạt thuần túy, hành động/sự kiện thường ngày, KHÔNG có sắc thái cảm xúc phức tạp, KHÔNG ẩn dụ, KHÔNG thành ngữ, từ vựng đơn giản nhất.
+     → VÍ DỤ bắt buộc cho 1.0: "Sao giờ mới tới?", "Mọi người đợi từ sáng, cậu ngủ quên rồi.", "Ra công viên chơi cầu tuột.", "Hôm nay tan làm muộn nên đi thang máy."
+   - A2 (1.1-1.2): Hàng ngày nhưng có thêm một chút biểu cảm đơn giản hoặc từ kép phổ biến. Chỉ dùng 1.2 nếu câu CÓ yếu tố này, không phải mặc định.
+   - B1-B2 (1.3-1.7): Chủ đề xã hội, công việc, gia đình phức tạp, cảm xúc đa chiều, từ vựng đa dạng.
+     *** ĐẶC BIỆT: Câu NGẮN nhưng có ẩn dụ, hình ảnh tinh tế, hoặc ngụ ý cảm xúc sâu → vẫn phải cho 1.5-1.7. ***
+     → VÍ DỤ: "Ánh mắt mẹ nói rằng không cần nhiều lời nữa." = 1.7 (ẩn dụ "ánh mắt nói"), không phải 1.2.
+   - B2-C1 (1.8-2.0): Học thuật, chuyên ngành hẹp, từ hán việt hiếm gặp, thuật ngữ kỹ thuật/pháp lý/y khoa.
+     *Điểm 1.8-2.0 RẤT KHÓ đạt — chỉ dùng khi câu mang đậm tính học thuật hoặc chuyên ngành sâu.*
+
+   RULE: Nếu câu chỉ mô tả hành động/sự việc hàng ngày không có tầng nghĩa ẩn hay từ vựng phức tạp → PHẢI cho 1.0, không phải 1.1 hay 1.2.
 
 Công thức cuối: CVR = Estimated TC * LC * TL.
 `;
@@ -276,7 +310,7 @@ ${systemInstructions}
 
 Transcript:
 "${transcript}"
-${matchedStr}
+${matchedStr}${correctionsStr}
 
 Return the result STRICTLY as a JSON object with this structure:
 {
@@ -295,14 +329,14 @@ Return the result STRICTLY as a JSON object with this structure:
       {
          "text": "cụm từ 1",
          "color": "RED",
-         "ohm": ${ohms.Red},
+         "ohm": ${ohms.RED},
          "confidence": 0.9,
          "reasoning": "..."
       }
     ],
     "confirmedTC": ${confirmedTC},
-    "estimatedTC": ${confirmedTC + 7},
-    "calculation": "${confirmedTC} (Confirmed) + 7 (Candidates)"
+    "estimatedTC": ${confirmedTC},
+    "calculation": "${confirmedTC} (Confirmed) + ..."
   },
   "tlBreakdown": {
     "band": "A1-A2",
@@ -310,9 +344,9 @@ Return the result STRICTLY as a JSON object with this structure:
     "confidence": 0.9,
     "reasoning": "TL value is influenced by the difficult matched and candidate vocab..."
   },
-  "predictedCVR": ${(confirmedTC + 7) * lcValue * 1.0},
+  "predictedCVR": ${confirmedTC * lcValue * 1.0},
   "formula": "Estimated TC * LC * TL",
-  "calculationString": "${confirmedTC + 7} * ${lcValue} * 1.0 = ${(confirmedTC + 7) * lcValue * 1.0}"
+  "calculationString": "..."
 }
 `;
 
@@ -333,6 +367,19 @@ Return the result STRICTLY as a JSON object with this structure:
       reasoning: reasoningString,
     };
 
+    // Normalize and Enforce Candidate Ohms based on settings
+    const rawCandidates = result.tcBreakdown.candidateResources || [];
+    const forcedCandidates = rawCandidates.map((c: any) => {
+      const color = (c.color || "").toUpperCase();
+      const enforcedOhm = ohms[color] || 0;
+      return {
+        ...c,
+        color: color.charAt(0) + color.slice(1).toLowerCase(), // Normalize back to 'Red', 'Green', etc.
+        ohm: enforcedOhm,
+        type: "candidate",
+      };
+    });
+
     // Force Deterministic TC accumulation with capping!
     result.tcBreakdown.matchedResources = matched;
 
@@ -347,11 +394,7 @@ Return the result STRICTLY as a JSON object with this structure:
 
     const allResources = [
       ...matched.map((m) => ({ ...m, type: "matched" })),
-      ...(result.tcBreakdown.candidateResources || []).map((c: any) => ({
-        ...c,
-        type: "candidate",
-        ohm: Number(c.ohm) || 0,
-      })),
+      ...forcedCandidates,
     ];
 
     allResources.sort((a, b) => {
@@ -374,6 +417,7 @@ Return the result STRICTLY as a JSON object with this structure:
       (acc, curr) => acc + curr.ohm,
       0,
     );
+    result.tcBreakdown.candidateResources = forcedCandidates;
     result.tcBreakdown.estimatedTC = includedTC;
 
     let calcStr = includedResources
@@ -410,11 +454,13 @@ export async function fetchOpenRouterModels(
   if (!apiKey) return [];
   try {
     const response = await fetch(
-      `/api/ai/models?endpoint=${encodeURIComponent(endpoint)}`,
+      `${endpoint.replace(/\/+$/, "")}/models`,
       {
         method: "GET",
         headers: {
           Authorization: `Bearer ${apiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "CHUNKS CVR",
         },
       },
     );
@@ -468,16 +514,32 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
   const modelsToTry = [primaryModel, fallbackModel].filter(Boolean);
   let lastError = null;
 
+  // ⚠️ Detect Mixed Content early: HTTP endpoint on HTTPS page will always be blocked by browser
+  const rawEndpoint = (endpoint || "https://openrouter.ai/api/v1").trim();
+  if (window.location.protocol === "https:" && rawEndpoint.startsWith("http:")) {
+    throw new Error(
+      `Mixed Content Error: Trang web chạy HTTPS nhưng endpoint đang dùng HTTP (${rawEndpoint}). Browser sẽ block request này.\n\n` +
+      `Giải pháp:\n` +
+      `1. Dùng endpoint HTTPS (nếu server hỗ trợ SSL)\n` +
+      `2. Hoặc cấu hình reverse proxy HTTPS → HTTP trên server\n` +
+      `3. Hoặc dùng OpenRouter (https://openrouter.ai/api/v1) với API key`
+    );
+  }
+
   for (const model of modelsToTry) {
     try {
-      const response = await fetch("/api/ai/chat", {
+      const targetEndpoint = rawEndpoint;
+      const chatEndpoint = `${targetEndpoint.replace(/\/+$/, "")}/chat/completions`;
+
+      const response = await fetch(chatEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "CHUNKS CVR",
         },
         body: JSON.stringify({
-          endpoint,
           model: model,
           messages: [{ role: "user", content: prompt }],
           stream: false,
@@ -564,24 +626,23 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
     }
   }
 
-  console.warn(
-    "All configured models failed, attempting to fall back to default Gemini model.",
+  // All custom models failed — throw the real error so the user can see what went wrong.
+  // We intentionally do NOT silently fall back to Gemini here, because:
+  //  - The user has configured a custom endpoint/model; Gemini is not expected.
+  //  - Silently falling back to Gemini with no key produces a confusing "No Gemini API Key" error
+  //    that obscures the real problem (wrong endpoint, Mixed Content, bad model name, etc.).
+  const errorMsg = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `Tất cả models đã thất bại.\n\n` +
+    `• Primary model: "${primaryModel}"\n` +
+    `• Fallback model: "${fallbackModel}"\n` +
+    `• Endpoint: "${rawEndpoint}"\n\n` +
+    `Lỗi cuối: ${errorMsg}\n\n` +
+    `Kiểm tra lại:\n` +
+    `1. Model name đúng format (vd: openai/gpt-4o, anthropic/claude-3-haiku)\n` +
+    `2. Endpoint phải HTTPS nếu site chạy HTTPS\n` +
+    `3. API Key còn hạn và đúng quyền`
   );
-  try {
-    const gClient = getGeminiClient();
-    const response = await gClient.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
-    if (response.text) return response.text;
-  } catch (geminiError) {
-    console.error("Fallback Gemini also failed:", geminiError);
-  }
-
-  throw lastError || new Error("All models failed");
 }
 
 function cleanJSON(text: string): string {

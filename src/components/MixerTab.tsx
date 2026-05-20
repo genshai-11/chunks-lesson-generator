@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, addDoc, query, limit } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { auth } from '../firebase';
+import { dataClient } from '../services/dataClient';
 import { Resource, Chunk, AISettings, SentenceLength, ColorCategory } from '../types';
 import { generateChunk } from '../services/aiService';
 import { Wand2, Save, Loader2, Sparkles, Settings2, Trash2, CheckCircle2, RefreshCw, Activity, Zap, Cpu, Info, ChevronDown, Copy } from 'lucide-react';
@@ -32,7 +32,6 @@ const MultiMeter = ({ label, value, unit, colorClass, icon: Icon, description }:
     </div>
   </div>
 );
-import { doc, getDoc } from 'firebase/firestore';
 
 interface DraftChunk {
   id: string;
@@ -57,9 +56,6 @@ const COLOR_STYLES: Record<string, { text: string, bg: string, border: string, t
   Blue: { text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', tagBg: 'bg-blue-50', tagText: 'text-blue-700', tagBorder: 'border-blue-100' },
   Red: { text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200', tagBg: 'bg-red-50', tagText: 'text-red-700', tagBorder: 'border-red-100' },
   Pink: { text: 'text-pink-700', bg: 'bg-pink-50', border: 'border-pink-200', tagBg: 'bg-pink-50', tagText: 'text-pink-700', tagBorder: 'border-pink-100' },
-  Yellow: { text: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200', tagBg: 'bg-yellow-50', tagText: 'text-yellow-700', tagBorder: 'border-yellow-100' },
-  Orange: { text: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200', tagBg: 'bg-orange-50', tagText: 'text-orange-700', tagBorder: 'border-orange-100' },
-  Purple: { text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', tagBg: 'bg-purple-50', tagText: 'text-purple-700', tagBorder: 'border-purple-100' },
 };
 
 const TOPIC_PRESETS = [
@@ -106,7 +102,7 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
   const [aiTargetCVR, setAiTargetCVR] = useState<number>(10);
   const [aiQuantity, setAiQuantity] = useState<number>(5);
   const [aiMaxPerColor, setAiMaxPerColor] = useState<number>(1);
-  const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0, Yellow: 0, Orange: 0, Purple: 0 });
+  const [aiRecipe, setAiRecipe] = useState<Record<ColorCategory, number>>({ Green: 0, Blue: 0, Pink: 0, Red: 0 });
   const [aiSentenceLength, setAiSentenceLength] = useState<SentenceLength>('Very Short');
   const [aiTopicLevel, setAiTopicLevel] = useState<number>(1.0);
   const [aiTopic, setAiTopic] = useState<string>('');
@@ -499,11 +495,12 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
           createdAt: new Date().toISOString()
         };
         
-        await addDoc(collection(db, `workspaces/default/chunks`), chunkData);
+        await dataClient.createChunk(chunkData);
         setSavedIndices(prev => new Set(prev).add(originalIdx));
       }));
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `workspaces/default/chunks`);
+      console.error(error);
+      showToast('Failed to save generated chunks.');
     } finally {
       setSaving(false);
     }
@@ -544,10 +541,11 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
         userId: auth.currentUser.uid,
         createdAt: new Date().toISOString()
       };
-      await addDoc(collection(db, `workspaces/default/chunks`), chunkData);
+      await dataClient.createChunk(chunkData);
       setSavedIndices(prev => new Set(prev).add(index));
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `workspaces/default/chunks`);
+      console.error(error);
+      showToast('Failed to save chunk.');
     } finally {
       setSavingIndex(null);
     }
@@ -1086,9 +1084,6 @@ export default function MixerTab({ resources, aiSettings }: { resources: Resourc
                               color === 'Blue' ? 'bg-blue-500' :
                               color === 'Red' ? 'bg-red-500' :
                               color === 'Pink' ? 'bg-pink-500' :
-                              color === 'Yellow' ? 'bg-yellow-500' :
-                              color === 'Orange' ? 'bg-orange-500' :
-                              color === 'Purple' ? 'bg-purple-500' :
                               'bg-gray-400'
                             }`} 
                             title={color} 
