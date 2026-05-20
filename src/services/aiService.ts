@@ -145,77 +145,174 @@ export async function measureCVR(
       .trim();
   const trStripped = stripPunctuation(transcript);
 
-  // Find matched resources using stripped text
-  const matched: any[] = [];
+  type MatchedResource = {
+    text: string;
+    color: ColorCategory;
+    ohm: number;
+    matchStart: number;
+    matchEnd: number;
+    matchText: string;
+    matchWordCount: number;
+    specificity: number;
+  };
 
-  if (resources && resources.length > 0) {
-    resources.forEach((r) => {
-      // Split by " / " first — resource names use this as an alternative-phrase separator
-      // e.g. "Phiền thiệt!,... / Thiệt là phiền toái,..." → two separate phrases to try
-      const alternatives = r.name.split(/ \/ /);
+  const wordCountOf = (str: string) =>
+    str.split(/\s+/).filter((w) => w.trim().length > 0).length;
 
-      let isMatch = false;
+  const findExactSpan = (phrase: string) => {
+    const v = phrase.trim();
+    if (!v) return null;
+    const paddedTranscript = ` ${trStripped} `;
+    const paddedNeedle = ` ${v} `;
+    const pos = paddedTranscript.indexOf(paddedNeedle);
+    if (pos < 0) return null;
+    return { start: pos, end: pos + v.length, matchText: v };
+  };
 
-      for (const alt of alternatives) {
-        if (isMatch) break;
+  const findOrderedWildcardSpan = (alt: string) => {
+    const rawSegments = alt
+      .split(/\.{2,}|…/g)
+      .map((part) => stripPunctuation(part.replace(/\//g, " ")).trim())
+      .filter((part) => part.length > 0);
 
-        const cleaned = alt.replace(/\.{2,}|…/g, " ").trim();
-        const wordsArr = cleaned.split(/\s+/).filter((w) => w.length > 0);
-        let variations: string[][] = [[]];
+    if (rawSegments.length === 0) return null;
+    if (rawSegments.length === 1) return findExactSpan(rawSegments[0]);
 
-        for (const word of wordsArr) {
-          if (word.includes("/")) {
-            // Inline slash: "Ai/đứa" → each side is a separate variant
-            const parts = word.split("/");
-            const newVars: string[][] = [];
-            for (const part of parts) {
-              if (part && part.trim() !== "") {
-                for (const v of variations) {
-                  newVars.push([...v, part]);
-                }
-              }
-            }
-            if (newVars.length > 0) {
-              variations = newVars;
-            }
-          } else {
+    let searchFrom = 0;
+    let start = -1;
+    let end = -1;
+
+    for (const segment of rawSegments) {
+      const paddedRemaining = ` ${trStripped.slice(searchFrom)} `;
+      const paddedSegment = ` ${segment} `;
+      const relativePos = paddedRemaining.indexOf(paddedSegment);
+      if (relativePos < 0) return null;
+
+      const segmentStart = searchFrom + relativePos;
+      const segmentEnd = segmentStart + segment.length;
+      if (start < 0) start = segmentStart;
+      end = segmentEnd;
+      searchFrom = segmentEnd;
+    }
+
+    return {
+      start,
+      end,
+      matchText: trStripped.slice(start, end).trim(),
+    };
+  };
+
+  const buildInlineSlashVariations = (alt: string) => {
+    const cleaned = alt.replace(/\.{2,}|…/g, " ").trim();
+    const wordsArr = cleaned.split(/\s+/).filter((w) => w.length > 0);
+    let variations: string[][] = [[]];
+
+    for (const word of wordsArr) {
+      if (word.includes("/")) {
+        const parts = word.split("/");
+        const newVars: string[][] = [];
+        for (const part of parts) {
+          if (part && part.trim() !== "") {
             for (const v of variations) {
-              v.push(word);
+              newVars.push([...v, part]);
             }
           }
         }
+        if (newVars.length > 0) variations = newVars;
+      } else {
+        for (const v of variations) v.push(word);
+      }
+    }
 
-        const textVariations = variations
-          .map((vArr) => stripPunctuation(vArr.join(" ")).trim())
-          .filter((v) => v.length > 0);
+    return variations
+      .map((vArr) => stripPunctuation(vArr.join(" ")).trim())
+      .filter((v) => v.length > 0);
+  };
 
+  const rawMatched: MatchedResource[] = [];
+
+  if (resources && resources.length > 0) {
+    resources.forEach((resource) => {
+      const alternatives = resource.name.split(/ \/ /);
+      let bestMatch: MatchedResource | null = null;
+
+      for (const alt of alternatives) {
+        const possibleSpans: Array<{ start: number; end: number; matchText: string; wildcard: boolean }> = [];
+        const altCore = stripPunctuation(alt.replace(/\.{2,}|…/g, " ").replace(/\//g, " ")).trim();
+        const altWordCount = wordCountOf(altCore);
+        const skipShortMultiAlternative = alternatives.length > 1 && altWordCount <= 2;
+
+        const wildcardSpan = skipShortMultiAlternative ? null : findOrderedWildcardSpan(alt);
+        if (wildcardSpan) possibleSpans.push({ ...wildcardSpan, wildcard: /\.{2,}|…/.test(alt) });
+
+        const textVariations = buildInlineSlashVariations(alt);
         textVariations.push(stripPunctuation(alt.replace(/\//g, " ")).trim());
 
         const uniqueVars = Array.from(new Set(textVariations));
-
         for (const v of uniqueVars) {
-          const vWordCount = v ? v.split(/\s+/).length : 0;
-          // Skip single-word matches for complex single-alternative resources
-          if (v && vWordCount === 1 && r.name.trim().split(/[\s/]+/).length >= 3) continue;
-          // Skip ≤2-word alternatives from multi-alternative resources (e.g. "Yên tâm" from "Yên chí! / Yên tâm!,...")
+          const vWordCount = wordCountOf(v);
+          if (v && vWordCount === 1 && resource.name.trim().split(/[\s/]+/).length >= 3) continue;
           if (v && vWordCount <= 2 && alternatives.length > 1) continue;
 
-          if (v && (" " + trStripped + " ").includes(" " + v + " ")) {
-            isMatch = true;
-            break;
+          const exactSpan = findExactSpan(v);
+          if (exactSpan) possibleSpans.push({ ...exactSpan, wildcard: false });
+        }
+
+        for (const span of possibleSpans) {
+          const matchWordCount = wordCountOf(span.matchText);
+          const specificity = matchWordCount + (span.wildcard ? 1.5 : 0) + Math.min(resource.ohm, 10) / 100;
+          const candidate: MatchedResource = {
+            text: resource.name,
+            color: resource.color,
+            ohm: Number(resource.ohm),
+            matchStart: span.start,
+            matchEnd: span.end,
+            matchText: span.matchText,
+            matchWordCount,
+            specificity,
+          };
+
+          if (!bestMatch || candidate.specificity > bestMatch.specificity) {
+            bestMatch = candidate;
           }
         }
       }
 
-      if (isMatch) {
-        matched.push({
-          text: r.name,
-          color: r.color,
-          ohm: r.ohm,
-        });
-      }
+      if (bestMatch) rawMatched.push(bestMatch);
     });
   }
+
+  const dedupeOverlappingResources = (items: MatchedResource[]) => {
+    const sorted = [...items].sort((a, b) => {
+      const aSpan = a.matchEnd - a.matchStart;
+      const bSpan = b.matchEnd - b.matchStart;
+      return b.specificity - a.specificity || bSpan - aSpan || b.ohm - a.ohm || b.text.length - a.text.length;
+    });
+
+    const selected: MatchedResource[] = [];
+    for (const item of sorted) {
+      const isDuplicate = selected.some((chosen) => {
+        const overlap = Math.max(0, Math.min(item.matchEnd, chosen.matchEnd) - Math.max(item.matchStart, chosen.matchStart));
+        if (overlap <= 0) return false;
+        const itemSpan = Math.max(1, item.matchEnd - item.matchStart);
+        const chosenSpan = Math.max(1, chosen.matchEnd - chosen.matchStart);
+        const smallerCoverage = overlap / Math.min(itemSpan, chosenSpan);
+        const eitherContainsText =
+          item.matchText.includes(chosen.matchText) || chosen.matchText.includes(item.matchText);
+        return smallerCoverage >= 0.6 || eitherContainsText;
+      });
+
+      if (!isDuplicate) selected.push(item);
+    }
+
+    return selected.sort((a, b) => a.matchStart - b.matchStart);
+  };
+
+  // Matched TC is deterministic and deduped by transcript span.
+  // This prevents double-counting aliases/subphrases such as "Nãy giờ" inside
+  // "Thì tui đã nói nãy giờ...", and prefers longer wildcard resources such as
+  // "Uả, cậu là... hay gì?!?" over short aliases like "Uả!...".
+  const matched = dedupeOverlappingResources(rawMatched);
 
   const confirmedTC = matched.reduce((acc, curr) => acc + curr.ohm, 0);
 
@@ -286,20 +383,18 @@ Bạn là CVR Measure Engine. Nhiệm vụ của bạn là phân tích đoạn T
    - Tính Confirmed TC = Tổng Ohm của các resources đã match.
    - Tính Estimated TC = Confirmed TC + Tổng Ohm của các Resource Candidates.
 2. LC (Length-Complexity): Đã được tính toán bằng Engine: ${sentences} câu, ${words} từ => Band: ${selectedBand}, Multiplier: ${lcValue}. Không cần tính lại.
-3. TL (Topic/Vocabulary Level): Đánh giá toàn bộ câu và chủ đề trên rải điểm 1.0 đến 2.0 (bước 0.1).
+3. TL (Topic/Vocabulary Level): Đánh giá chủ đề/ngữ cảnh theo đúng định nghĩa The Mixer, KHÔNG cộng lại độ khó idiom/resource vì TC đã chịu phần đó.
 
-   *** ĐIỂM 1.0 LÀ CÓ THẬT — PHẢI DÙNG khi câu đủ điều kiện, KHÔNG được dùng 1.2 như một "điểm an toàn mặc định" ***
+   --- STRICT TL MAPPING RULES (same as The Mixer) ---
+   - TL 1.0 - 1.2: Daily life, casual chat, standard routines. (A1-A2 vocabulary)
+     → Câu đời thường, tranh cãi nhẹ, đi học/đi làm/công viên/thang máy/trễ giờ/vay tiền/lừa tiền vẫn ở vùng này nếu không có domain xã hội/nghề nghiệp/học thuật.
+     → Dùng 1.0 cho daily routine thuần túy; không dùng 1.2 như default an toàn.
+   - TL 1.3 - 1.7: Social issues, professional work, academic study, intermediate lifestyle. (B1-B2 vocabulary)
+     → Chủ đề xã hội/cộng đồng, công việc chuyên môn, học thuật, gia đình-pháp lý/phức tạp, hoặc câu có hình ảnh/ngụ ý tinh tế thật sự.
+   - TL 1.8 - 2.0: Industry-specific discussions, complex operations, business strategies, intellectual discussions, specialized academia.
+     → Chỉ dùng khi có domain chuyên ngành rõ ràng; casual scenario bị cấm lên 1.8+.
 
-   - A1 (1.0): Câu sinh hoạt thuần túy, hành động/sự kiện thường ngày, KHÔNG có sắc thái cảm xúc phức tạp, KHÔNG ẩn dụ, KHÔNG thành ngữ, từ vựng đơn giản nhất.
-     → VÍ DỤ bắt buộc cho 1.0: "Sao giờ mới tới?", "Mọi người đợi từ sáng, cậu ngủ quên rồi.", "Ra công viên chơi cầu tuột.", "Hôm nay tan làm muộn nên đi thang máy."
-   - A2 (1.1-1.2): Hàng ngày nhưng có thêm một chút biểu cảm đơn giản hoặc từ kép phổ biến. Chỉ dùng 1.2 nếu câu CÓ yếu tố này, không phải mặc định.
-   - B1-B2 (1.3-1.7): Chủ đề xã hội, công việc, gia đình phức tạp, cảm xúc đa chiều, từ vựng đa dạng.
-     *** ĐẶC BIỆT: Câu NGẮN nhưng có ẩn dụ, hình ảnh tinh tế, hoặc ngụ ý cảm xúc sâu → vẫn phải cho 1.5-1.7. ***
-     → VÍ DỤ: "Ánh mắt mẹ nói rằng không cần nhiều lời nữa." = 1.7 (ẩn dụ "ánh mắt nói"), không phải 1.2.
-   - B2-C1 (1.8-2.0): Học thuật, chuyên ngành hẹp, từ hán việt hiếm gặp, thuật ngữ kỹ thuật/pháp lý/y khoa.
-     *Điểm 1.8-2.0 RẤT KHÓ đạt — chỉ dùng khi câu mang đậm tính học thuật hoặc chuyên ngành sâu.*
-
-   RULE: Nếu câu chỉ mô tả hành động/sự việc hàng ngày không có tầng nghĩa ẩn hay từ vựng phức tạp → PHẢI cho 1.0, không phải 1.1 hay 1.2.
+   IMPORTANT: Idioms/metaphors/resources such as RED/PINK increase TC, not TL. Only raise TL when the whole topic/domain or discourse layer is more advanced.
 
 Công thức cuối: CVR = Estimated TC * LC * TL.
 `;
@@ -351,6 +446,96 @@ Return the result STRICTLY as a JSON object with this structure:
 }
 `;
 
+  const calibrateTopicLevel = (aiTlValue: number, candidateResources: any[] = []): TLBreakdown => {
+    const text = trStripped;
+    const allTerms = `${text} ${matched.map((m) => m.text).join(" ")} ${candidateResources.map((c) => c.text || "").join(" ")}`
+      .toLowerCase()
+      .normalize("NFC");
+    const hasAny = (terms: string[]) => terms.some((term) => allTerms.includes(term));
+
+    const metaphorSignals = [
+      /ánh mắt\s+[^.?!]*\s+nói/,
+      /ánh mắt\s+[^.?!]*\s+bảo/,
+      /không cần nhiều lời/,
+      /ẩn ý/,
+      /ngụ ý/,
+    ];
+    const hasMetaphoricalDiscourse = metaphorSignals.some((re) => re.test(text));
+
+    const hasSpecializedDomain = hasAny([
+      "pháp lý",
+      "y khoa",
+      "tài chính",
+      "chiến lược",
+      "chuỗi cung ứng",
+      "vận hành",
+      "học thuật",
+      "nghiên cứu",
+      "chuyên ngành",
+      "kỹ thuật",
+      "công nghệ",
+      "doanh nghiệp",
+    ]);
+
+    const hasSocialOrCivicDomain = hasAny([
+      "tệ nạn",
+      "xã hội",
+      "xh",
+      "dân phòng",
+      "tuần tra",
+      "cờ bạc",
+      "trộm vặt",
+      "tổ dân phố",
+      "lắp camera",
+      "khu phố",
+      "cộng đồng",
+      "an ninh",
+    ]);
+
+    const hasIntermediateFamilyOrWorkDomain = hasAny([
+      "bán nhà",
+      "chuyển đi",
+      "nhà cũ",
+      "cuộc cãi vã",
+      "kết luận",
+      "họp gia đình",
+      "buổi họp",
+      "công việc",
+      "công ty",
+      "dự án",
+      "đồng nghiệp",
+    ]);
+
+    let tlValue = 1.0;
+    let band = "TL 1.0-1.2 Daily life / casual routine";
+    let reason = "Daily-life/casual context: TC carries idiom/resource difficulty, so TL stays low.";
+
+    if (hasSpecializedDomain) {
+      tlValue = Math.max(1.5, Math.min(2.0, Math.round(aiTlValue * 10) / 10 || 1.8));
+      band = tlValue >= 1.8 ? "TL 1.8-2.0 Specialized professional/academic" : "TL 1.3-1.7 Professional/intermediate domain";
+      reason = "Specialized/professional domain detected; TL can rise beyond daily-life range.";
+    } else if (hasMetaphoricalDiscourse) {
+      tlValue = 1.7;
+      band = "TL 1.3-1.7 Figurative/intermediate discourse";
+      reason = "Metaphorical or implied discourse layer detected (e.g. eyes 'speaking' / no need for words).";
+    } else if (hasSocialOrCivicDomain || hasIntermediateFamilyOrWorkDomain) {
+      tlValue = 1.3;
+      band = "TL 1.3-1.7 Social/intermediate lifestyle";
+      reason = "Social/civic, work, or family-complexity domain detected; calibrated to lower B1 range.";
+    } else if ((selectedBand === "Medium" || selectedBand === "Long") && matched.length >= 3) {
+      tlValue = 1.3;
+      band = "TL 1.3-1.7 Intermediate lifestyle";
+      reason = "Casual topic, but medium/long discourse with multiple confirmed resources fits intermediate lifestyle at TL 1.3.";
+    }
+
+    return {
+      band,
+      tlValue,
+      confidence: 0.9,
+      reasoning: `${reason} Mixer TL mapping applied: 1.0-1.2 daily/casual, 1.3-1.7 social/professional/academic/intermediate lifestyle, 1.8-2.0 specialized. Raw AI TL was ${aiTlValue}.`,
+    };
+  };
+
   const responseText = await callAI(prompt, settings);
   try {
     const jsonMatch =
@@ -368,17 +553,43 @@ Return the result STRICTLY as a JSON object with this structure:
       reasoning: reasoningString,
     };
 
-    // Normalize and Enforce Candidate Ohms based on settings
+    // Normalize, enforce candidate Ohms, and remove candidates that overlap confirmed resources.
     const rawCandidates = result.tcBreakdown.candidateResources || [];
-    const forcedCandidates = rawCandidates.map((c: any) => {
+    const forcedCandidatesRaw = rawCandidates.map((c: any) => {
       const color = (c.color || "").toUpperCase();
       const enforcedOhm = ohms[color] || 0;
       return {
         ...c,
+        text: String(c.text || "").trim(),
         color: color.charAt(0) + color.slice(1).toLowerCase(), // Normalize back to 'Red', 'Green', etc.
         ohm: enforcedOhm,
         type: "candidate",
+        normalizedText: stripPunctuation(String(c.text || "")).trim(),
       };
+    });
+
+    const forcedCandidates = forcedCandidatesRaw.filter((candidate, idx, arr) => {
+      const candidateText = candidate.normalizedText;
+      if (!candidateText || candidate.ohm <= 0) return false;
+
+      const overlapsMatched = matched.some((m) => {
+        const matchText = stripPunctuation(m.matchText || m.text).trim();
+        return (
+          matchText.includes(candidateText) ||
+          candidateText.includes(matchText)
+        );
+      });
+      if (overlapsMatched) return false;
+
+      const duplicateIdx = arr.findIndex((other) => {
+        const otherText = other.normalizedText;
+        return (
+          otherText === candidateText ||
+          (otherText && candidateText && (otherText.includes(candidateText) || candidateText.includes(otherText)))
+        );
+      });
+
+      return duplicateIdx === idx;
     });
 
     // Force Deterministic TC accumulation with capping!
@@ -431,9 +642,11 @@ Return the result STRICTLY as a JSON object with this structure:
 
     result.tcBreakdown.calculation = `${calcStr} = ${includedTC} (Capped at ${maxAllowedResources} slots for ${selectedBand})`;
 
-    // Recalculate exactly CVR
-    result.tlBreakdown.tlValue =
-      Math.round(result.tlBreakdown.tlValue * 10) / 10;
+    // Recalculate exactly CVR with deterministic TL calibrated to The Mixer's topic-level definitions.
+    result.tlBreakdown = calibrateTopicLevel(
+      Number(result.tlBreakdown?.tlValue) || 1.0,
+      forcedCandidates,
+    );
     const finalCVR =
       result.tcBreakdown.estimatedTC *
       result.lcBreakdown.lcValue *
