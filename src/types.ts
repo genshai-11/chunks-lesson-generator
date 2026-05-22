@@ -67,6 +67,8 @@ export interface AISettings {
   };
   m2mApiKey?: string;
   sentenceConstraints?: Record<SentenceLength, SentenceConstraint>;
+  tcSlotsPerBand?: Record<SentenceLength, number>;
+  tcCandidateFillStrategy?: 'highest-ohm' | 'lowest-ohm';
   geminiApiKey?: string;
   audioTranscriptModel?: string;
   dynamicTLTiers?: { maxCvr: number; min: number; max: number }[];

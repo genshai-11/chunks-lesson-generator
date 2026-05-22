@@ -21,11 +21,13 @@ export default function SettingsTab() {
     deepgramModel: 'aura-asteria-en',
     m2mApiKey: '',
     sentenceConstraints: {
-      'Very Short': { maxSentences: 1, maxWords: 15 },
+      'Very Short': { maxSentences: 1, maxWords: 18 },
       'Short': { maxSentences: 2, maxWords: 30 },
       'Medium': { maxSentences: 3, maxWords: 60 },
       'Long': { maxSentences: 5, maxWords: 100 }
     },
+    tcSlotsPerBand: { 'Very Short': 2, 'Short': 3, 'Medium': 4, 'Long': 5 },
+    tcCandidateFillStrategy: 'highest-ohm',
     formulaType: 'sum',
     complexityMultipliers: {
       'Very Short': 1,
@@ -63,11 +65,17 @@ export default function SettingsTab() {
           }
           if (!data.sentenceConstraints) {
             data.sentenceConstraints = {
-              'Very Short': { maxSentences: 1, maxWords: 15 },
+              'Very Short': { maxSentences: 1, maxWords: 18 },
               'Short': { maxSentences: 2, maxWords: 30 },
               'Medium': { maxSentences: 3, maxWords: 60 },
               'Long': { maxSentences: 5, maxWords: 100 }
             };
+          }
+          if (!data.tcSlotsPerBand) {
+            data.tcSlotsPerBand = { 'Very Short': 2, 'Short': 3, 'Medium': 4, 'Long': 5 };
+          }
+          if (!data.tcCandidateFillStrategy) {
+            data.tcCandidateFillStrategy = 'highest-ohm';
           }
           // TC/R is always a linear sum of resource Ohms. Force legacy values like "words" back to sum.
           data.formulaType = 'sum';
@@ -589,7 +597,7 @@ export default function SettingsTab() {
                             ...settings,
                             sentenceConstraints: {
                               ...(settings.sentenceConstraints || {
-                                'Very Short': { maxSentences: 1, maxWords: 15 },
+                                'Very Short': { maxSentences: 1, maxWords: 18 },
                                 'Short': { maxSentences: 2, maxWords: 30 },
                                 'Medium': { maxSentences: 3, maxWords: 60 },
                                 'Long': { maxSentences: 5, maxWords: 100 }
@@ -609,7 +617,7 @@ export default function SettingsTab() {
                             ...settings,
                             sentenceConstraints: {
                               ...(settings.sentenceConstraints || {
-                                'Very Short': { maxSentences: 1, maxWords: 15 },
+                                'Very Short': { maxSentences: 1, maxWords: 18 },
                                 'Short': { maxSentences: 2, maxWords: 30 },
                                 'Medium': { maxSentences: 3, maxWords: 60 },
                                 'Long': { maxSentences: 5, maxWords: 100 }
@@ -1127,6 +1135,71 @@ export default function SettingsTab() {
                         className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm bg-white"
                       />
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-100">
+                <h4 className="text-sm font-bold text-gray-900 mb-1 flex items-center">
+                  <Layers className="w-4 h-4 mr-2 text-gray-400" /> TC Slot Cap per LC Band
+                </h4>
+                <p className="text-xs text-gray-400 mb-4">
+                  Max resources (matched + candidates) counted in Estimated TC for each band. Overflow resources are demoted to TC-Derived TL Evidence.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {(['Very Short', 'Short', 'Medium', 'Long'] as const).map((len) => {
+                    const defaults: Record<string, number> = { 'Very Short': 2, 'Short': 3, 'Medium': 4, 'Long': 5 };
+                    return (
+                      <div key={len} className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                        <label className="block text-[10px] font-bold uppercase mb-2 text-gray-700">{len}</label>
+                        <input
+                          type="number" min={1} max={20}
+                          value={settings.tcSlotsPerBand?.[len] ?? defaults[len]}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            tcSlotsPerBand: {
+                              'Very Short': 2, 'Short': 3, 'Medium': 4, 'Long': 5,
+                              ...(settings.tcSlotsPerBand || {}),
+                              [len]: Number(e.target.value)
+                            }
+                          })}
+                          className="w-full rounded-lg border-gray-200 shadow-sm focus:border-red-500 focus:ring-red-500 border p-2 text-sm text-center font-bold bg-white"
+                        />
+                        <span className="text-[9px] text-gray-400 uppercase mt-1 block text-center">max slots</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <h4 className="text-sm font-bold text-gray-900 mb-1 flex items-center">
+                  <Calculator className="w-4 h-4 mr-2 text-gray-400" /> Candidate Fill Strategy
+                </h4>
+                <p className="text-xs text-gray-400 mb-3">
+                  When slots remain after matched resources, which candidates fill first?
+                </p>
+                <div className="flex gap-4">
+                  {[
+                    { value: 'highest-ohm', label: 'Highest Ohm first', desc: 'RED/BLUE trước — ưu tiên cụm khó nhất' },
+                    { value: 'lowest-ohm',  label: 'Lowest Ohm first',  desc: 'PINK/GREEN trước — phủ rộng, nhiều cụm hơn' },
+                  ].map(({ value, label, desc }) => (
+                    <label key={value} className={`flex-1 flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      (settings.tcCandidateFillStrategy || 'highest-ohm') === value
+                        ? 'border-red-500 bg-red-50'
+                        : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="tcFillStrategy"
+                        value={value}
+                        checked={(settings.tcCandidateFillStrategy || 'highest-ohm') === value}
+                        onChange={() => setSettings({ ...settings, tcCandidateFillStrategy: value as 'highest-ohm' | 'lowest-ohm' })}
+                        className="mt-0.5 text-red-600 focus:ring-red-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-gray-800 block">{label}</span>
+                        <span className="text-[10px] text-gray-500">{desc}</span>
+                      </div>
+                    </label>
                   ))}
                 </div>
               </div>

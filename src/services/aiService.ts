@@ -335,7 +335,7 @@ export async function measureCVR(
     Long: 2.5,
   };
   const constraints = settings?.sentenceConstraints || {
-    "Very Short": { maxSentences: 1, maxWords: 15 },
+    "Very Short": { maxSentences: 1, maxWords: 18 },
     Short: { maxSentences: 2, maxWords: 30 },
     Medium: { maxSentences: 3, maxWords: 60 },
     Long: { maxSentences: 5, maxWords: 100 },
@@ -349,7 +349,7 @@ export async function measureCVR(
 
   let selectedBand: SentenceLength = "Long";
 
-  const vsMaxWords = Number(constraints["Very Short"]?.maxWords) || 15;
+  const vsMaxWords = Number(constraints["Very Short"]?.maxWords) || 18;
   const sMaxWords = Number(constraints["Short"]?.maxWords) || 30;
   const mMaxWords = Number(constraints["Medium"]?.maxWords) || 60;
   const lMaxWords = Number(constraints["Long"]?.maxWords) || 100;
@@ -374,27 +374,42 @@ Bạn là CVR Measure Engine. Nhiệm vụ của bạn là phân tích đoạn T
 
 1. TC (Total Resource Ohm load): Bóc tách các cụm từ (trừ các từ ngữ đã match ở trên) làm Resource Candidates.
    --- STRICT VOCABULARY MAPPING RULES ---
-   - PINK (${ohms.PINK}Ω): Thuật ngữ then chốt hoặc danh từ cốt lõi (Key Concepts / Technical Terms). Từ vựng mang tính kỹ thuật hoặc định danh cụ thể. Phải từ B1 trở lên — từ quá phổ thông không được xếp PINK. Ví dụ: Dép lào, Ví điện tử.
+   - PINK (${ohms.PINK}Ω): Key Concepts / Technical Terms. 
+     *CHỈ ĐỊNH:* Chỉ dành cho danh từ hoặc thuật ngữ có độ khó từ B1 trở lên (CEFR). Phải là các từ mang tính kỹ thuật, định danh chuyên biệt hoặc từ vựng không phổ biến. 
+     *LOẠI TRỪ:* Các từ vựng căn bản (A1-A2) như "nhà", "xe", "điện thoại", "ăn cơm" KHÔNG được tính là PINK dù chúng là danh từ chính. 
+     Ví dụ: "Ví điện tử", "Thị thực", "Lạm phát", "Dép lào".
    - GREEN (${ohms.GREEN}Ω): Từ đệm, từ nối hoặc từ điều hướng (Discourse Markers / Fillers / Conditioners). Dùng để định hướng câu nói, tạo sự tự nhiên hoặc làm mềm ngữ cảnh. Ví dụ: Tin tui đi, Thành thật mà nói, Nói chung là.
    - BLUE (${ohms.BLUE}Ω): Khung câu hoặc cấu trúc ngữ pháp (Sentence Frames / Grammatical Skeletons). Các cấu trúc chờ được lấp đầy nội dung. Ví dụ: Cậu nên nhớ rằng..., Tui không ngờ là..., Vấn đề không phải là....
-   - RED (${ohms.RED}Ω): Thành ngữ, ẩn dụ hoặc cách diễn đạt hình ảnh (Idioms / Metaphors / Vivid Expressions). Không mang nghĩa đen, độ phức tạp ngữ nghĩa và văn hóa cao nhất. Ví dụ: Mật ngọt chết ruồi, Cậu tới số rồi, Vắt chân lên cổ.
+   - RED (${ohms.RED}Ω): Idioms / Metaphors / Nuanced Expressions. 
+     *CHỈ ĐỊNH:* Các cụm từ không mang nghĩa đen, đòi hỏi sự hiểu biết về văn hóa hoặc tư duy hình ảnh. 
+     *BẢN CHẤT:* Độ phức tạp nằm ở tầng ngữ nghĩa (semantics) và sự bóng bẩy, không phải độ khó của từ vựng đơn lẻ. 
+     Ví dụ: "Mật ngọt chết ruồi", "Cậu tới số rồi", "Vắt chân lên cổ", "Cái nết đánh chết cái đẹp".
    *QUAN TRỌNG: Phân loại theo chức năng ngôn ngữ của cụm từ trong câu, không phải theo độ phổ biến của từ đơn lẻ.*
 
    - Tính Confirmed TC = Tổng Ohm của các resources đã match.
    - Tính Estimated TC = Confirmed TC + Tổng Ohm của các Resource Candidates.
 2. LC (Length-Complexity): Đã được tính toán bằng Engine: ${sentences} câu, ${words} từ => Band: ${selectedBand}, Multiplier: ${lcValue}. Không cần tính lại.
-3. TL (Topic/Vocabulary Level): Đánh giá chủ đề/ngữ cảnh theo đúng định nghĩa The Mixer, KHÔNG cộng lại độ khó idiom/resource vì TC đã chịu phần đó.
+3. TL (Topic/Vocabulary Level): Đánh giá theo HAI TRỤC ĐỘC LẬP, lấy max().
 
-   --- STRICT TL MAPPING RULES (same as The Mixer) ---
-   - TL 1.0 - 1.2: Daily life, casual chat, standard routines. (A1-A2 vocabulary)
-     → Câu đời thường, tranh cãi nhẹ, đi học/đi làm/công viên/thang máy/trễ giờ/vay tiền/lừa tiền vẫn ở vùng này nếu không có domain xã hội/nghề nghiệp/học thuật.
-     → Dùng 1.0 cho daily routine thuần túy; không dùng 1.2 như default an toàn.
-   - TL 1.3 - 1.7: Social issues, professional work, academic study, intermediate lifestyle. (B1-B2 vocabulary)
-     → Chủ đề xã hội/cộng đồng, công việc chuyên môn, học thuật, gia đình-pháp lý/phức tạp, hoặc câu có hình ảnh/ngụ ý tinh tế thật sự.
-   - TL 1.8 - 2.0: Industry-specific discussions, complex operations, business strategies, intellectual discussions, specialized academia.
-     → Chỉ dùng khi có domain chuyên ngành rõ ràng; casual scenario bị cấm lên 1.8+.
+   --- TRỤC T: Topic/Discourse Level ---
+   T=1.0: Sinh hoạt đời thường, không có chuyên môn (mua sắm, thời tiết, gia đình)
+   T=1.3: Xã hội, tình cảm phức tạp, nghề nghiệp phổ thông (bán hàng, dạy học, y tá)
+   T=1.6: Chuyên môn rõ ràng (y khoa lâm sàng, pháp lý, kỹ thuật, tài chính)
+   T=1.9: Học thuật/nghiên cứu chuyên ngành hẹp (triết học, chiến lược kinh doanh phức tạp)
 
-   IMPORTANT: Idioms/metaphors/resources such as RED/PINK increase TC, not TL. Only raise TL when the whole topic/domain or discourse layer is more advanced.
+   --- TRỤC V: Vocabulary/Lexical Difficulty ---
+   V=1.0: A1-A2 — từ tần suất cao, ai cũng biết (nhà, xe, ăn, đi)
+   V=1.2: B1 — từ trung cấp thông dụng (quyết định, hài lòng, thủ tục)
+   V=1.4: B2 — từ trung-cao, cần học chủ động (tiêu thụ, phân tích, dự báo)
+   V=1.6: C1 — từ nâng cao, ít gặp trong giao tiếp thường (tích lũy, đồng thuận, chiến lược)
+   V=1.8: C2 — từ bác học, hiếm, học thuật cao (hội tụ, biện chứng, trị liệu chuyên sâu)
+
+   --- QUY TẮC KẾT HỢP ---
+   TL = max(T, V)   →  làm tròn 0.1 gần nhất, clamp [1.0, 2.0]
+   *Ví dụ: Chủ đề đời sống (T=1.0) nhưng dùng từ C1 (V=1.6) → TL=1.6*
+   *Ví dụ: Chủ đề y khoa (T=1.6) nhưng dùng từ A2 (V=1.0) → TL=1.6*
+
+   IMPORTANT: Idioms/metaphors (RED) và Technical Terms (PINK) đã được tính vào TC. Khi đánh giá Trục V, hãy nhìn vào từ vựng NGOÀI các TC resources — các tính từ, động từ, danh từ chức năng trong câu.
 
 Công thức cuối: CVR = Estimated TC * LC * TL.
 `;
@@ -438,7 +453,7 @@ Return the result STRICTLY as a JSON object with this structure:
     "band": "A1-A2",
     "tlValue": 1.0,
     "confidence": 0.9,
-    "reasoning": "TL value is influenced by the difficult matched and candidate vocab..."
+    "reasoning": "..."
   },
   "predictedCVR": ${confirmedTC * lcValue * 1.0},
   "formula": "Estimated TC * LC * TL",
@@ -446,93 +461,34 @@ Return the result STRICTLY as a JSON object with this structure:
 }
 `;
 
-  const calibrateTopicLevel = (aiTlValue: number, candidateResources: any[] = []): TLBreakdown => {
-    const text = trStripped;
-    const allTerms = `${text} ${matched.map((m) => m.text).join(" ")} ${candidateResources.map((c) => c.text || "").join(" ")}`
-      .toLowerCase()
-      .normalize("NFC");
-    const hasAny = (terms: string[]) => terms.some((term) => allTerms.includes(term));
+  const calibrateTopicLevel = (
+    aiTlValue: number,
+    aiReasoning: string,
+    tcOverflow: Array<{ text?: string; name?: string; color: string; ohm: number; type: string }> = [],
+  ): TLBreakdown => {
+    // Normalization and boundary enforcement
+    const finalTl = Math.max(1.0, Math.min(2.0, Number(aiTlValue) || 1.0));
 
-    const metaphorSignals = [
-      /ánh mắt\s+[^.?!]*\s+nói/,
-      /ánh mắt\s+[^.?!]*\s+bảo/,
-      /không cần nhiều lời/,
-      /ẩn ý/,
-      /ngụ ý/,
-    ];
-    const hasMetaphoricalDiscourse = metaphorSignals.some((re) => re.test(text));
-
-    const hasSpecializedDomain = hasAny([
-      "pháp lý",
-      "y khoa",
-      "tài chính",
-      "chiến lược",
-      "chuỗi cung ứng",
-      "vận hành",
-      "học thuật",
-      "nghiên cứu",
-      "chuyên ngành",
-      "kỹ thuật",
-      "công nghệ",
-      "doanh nghiệp",
-    ]);
-
-    const hasSocialOrCivicDomain = hasAny([
-      "tệ nạn",
-      "xã hội",
-      "xh",
-      "dân phòng",
-      "tuần tra",
-      "cờ bạc",
-      "trộm vặt",
-      "tổ dân phố",
-      "lắp camera",
-      "khu phố",
-      "cộng đồng",
-      "an ninh",
-    ]);
-
-    const hasIntermediateFamilyOrWorkDomain = hasAny([
-      "bán nhà",
-      "chuyển đi",
-      "nhà cũ",
-      "cuộc cãi vã",
-      "kết luận",
-      "họp gia đình",
-      "buổi họp",
-      "công việc",
-      "công ty",
-      "dự án",
-      "đồng nghiệp",
-    ]);
-
-    let tlValue = 1.0;
     let band = "TL 1.0-1.2 Daily life / casual routine";
-    let reason = "Daily-life/casual context: TC carries idiom/resource difficulty, so TL stays low.";
+    if (finalTl >= 1.8) {
+      band = "TL 1.8-2.0 Specialized professional/academic";
+    } else if (finalTl >= 1.3) {
+      band = "TL 1.3-1.7 Social/Professional/Nuanced domain";
+    }
 
-    if (hasSpecializedDomain) {
-      tlValue = Math.max(1.5, Math.min(2.0, Math.round(aiTlValue * 10) / 10 || 1.8));
-      band = tlValue >= 1.8 ? "TL 1.8-2.0 Specialized professional/academic" : "TL 1.3-1.7 Professional/intermediate domain";
-      reason = "Specialized/professional domain detected; TL can rise beyond daily-life range.";
-    } else if (hasMetaphoricalDiscourse) {
-      tlValue = 1.7;
-      band = "TL 1.3-1.7 Figurative/intermediate discourse";
-      reason = "Metaphorical or implied discourse layer detected (e.g. eyes 'speaking' / no need for words).";
-    } else if (hasSocialOrCivicDomain || hasIntermediateFamilyOrWorkDomain) {
-      tlValue = 1.3;
-      band = "TL 1.3-1.7 Social/intermediate lifestyle";
-      reason = "Social/civic, work, or family-complexity domain detected; calibrated to lower B1 range.";
-    } else if ((selectedBand === "Medium" || selectedBand === "Long") && matched.length >= 3) {
-      tlValue = 1.3;
-      band = "TL 1.3-1.7 Intermediate lifestyle";
-      reason = "Casual topic, but medium/long discourse with multiple confirmed resources fits intermediate lifestyle at TL 1.3.";
+    let overflowNote = "";
+    if (tcOverflow.length > 0) {
+      const overflowStr = tcOverflow
+        .map((r) => `"${r.text || r.name}" (${r.color} ${r.ohm}Ω, ${r.type})`)
+        .join(", ");
+      overflowNote = ` | TC-Derived TL Evidence (overflow — counted in TL context, not TC): ${overflowStr}`;
     }
 
     return {
       band,
-      tlValue,
+      tlValue: finalTl,
       confidence: 0.9,
-      reasoning: `${reason} Mixer TL mapping applied: 1.0-1.2 daily/casual, 1.3-1.7 social/professional/academic/intermediate lifestyle, 1.8-2.0 specialized. Raw AI TL was ${aiTlValue}.`,
+      reasoning: `AI-Driven Analysis: ${aiReasoning}${overflowNote}`,
     };
   };
 
@@ -595,14 +551,18 @@ Return the result STRICTLY as a JSON object with this structure:
     // Force Deterministic TC accumulation with capping!
     result.tcBreakdown.matchedResources = matched;
 
-    const maxResourcesPerBand: Record<SentenceLength, number> = {
-      "Very Short": 1,
-      Short: 2,
-      Medium: 3,
-      Long: 4,
+    const defaultSlotsPerBand: Record<SentenceLength, number> = {
+      "Very Short": 2,
+      Short: 3,
+      Medium: 4,
+      Long: 5,
     };
+    const slotsPerBand = settings?.tcSlotsPerBand || defaultSlotsPerBand;
+    const maxAllowedResources = slotsPerBand[selectedBand] ?? defaultSlotsPerBand[selectedBand];
 
-    const maxAllowedResources = maxResourcesPerBand[selectedBand] || 4;
+    // Fill strategy: matched always come first (highest ohm within matched).
+    // For candidates, sort by configured strategy: 'highest-ohm' (default) or 'lowest-ohm'.
+    const fillStrategy = settings?.tcCandidateFillStrategy || "highest-ohm";
 
     const allResources = [
       ...matched.map((m) => ({ ...m, type: "matched" })),
@@ -610,25 +570,24 @@ Return the result STRICTLY as a JSON object with this structure:
     ];
 
     allResources.sort((a, b) => {
-      // Prioritize matched resources
       if (a.type === "matched" && b.type !== "matched") return -1;
       if (a.type !== "matched" && b.type === "matched") return 1;
-      // If same type, sort by ohm descending
+      if (a.type === "candidate" && b.type === "candidate") {
+        return fillStrategy === "lowest-ohm" ? a.ohm - b.ohm : b.ohm - a.ohm;
+      }
+      // Both matched: always highest ohm first
       return b.ohm - a.ohm;
     });
 
     const includedResources = allResources.slice(0, maxAllowedResources);
     const overflowResources = allResources.slice(maxAllowedResources);
 
-    const includedTC = includedResources.reduce(
-      (acc, curr) => acc + curr.ohm,
-      0,
-    );
+    const includedTC = includedResources.reduce((acc, curr) => acc + curr.ohm, 0);
 
-    result.tcBreakdown.confirmedTC = matched.reduce(
-      (acc, curr) => acc + curr.ohm,
-      0,
-    );
+    // confirmedTC = only matched resources that fit within the slot cap (not all matched).
+    // This keeps confirmedTC <= estimatedTC per CONTEXT.md invariant.
+    const includedMatched = includedResources.filter((r) => r.type === "matched");
+    result.tcBreakdown.confirmedTC = includedMatched.reduce((acc, curr) => acc + curr.ohm, 0);
     result.tcBreakdown.candidateResources = forcedCandidates;
     result.tcBreakdown.estimatedTC = includedTC;
 
@@ -636,22 +595,24 @@ Return the result STRICTLY as a JSON object with this structure:
       .map((r) => `${r.ohm} (${r.type})`)
       .join(" + ");
     if (overflowResources.length > 0) {
-      calcStr += ` ... [+${overflowResources.length} overflow item(s) ignored]`;
+      calcStr += ` ... [+${overflowResources.length} overflow item(s) → TL evidence]`;
     }
     if (includedResources.length === 0) calcStr = "0";
 
-    result.tcBreakdown.calculation = `${calcStr} = ${includedTC} (Capped at ${maxAllowedResources} slots for ${selectedBand})`;
+    result.tcBreakdown.calculation = `${calcStr} = ${includedTC} (Capped at ${maxAllowedResources} slots for ${selectedBand}, fill: ${fillStrategy})`;
 
     // Recalculate exactly CVR with deterministic TL calibrated to The Mixer's topic-level definitions.
+    // Overflow resources are not counted in estimatedTC but are passed as TC-Derived TL Evidence.
     result.tlBreakdown = calibrateTopicLevel(
       Number(result.tlBreakdown?.tlValue) || 1.0,
-      forcedCandidates,
+      result.tlBreakdown?.reasoning || "No reasoning provided by AI.",
+      overflowResources,
     );
     const finalCVR =
       result.tcBreakdown.estimatedTC *
       result.lcBreakdown.lcValue *
       result.tlBreakdown.tlValue;
-    result.predictedCVR = Math.round(finalCVR);
+    result.predictedCVR = Math.max(1, Math.round(finalCVR));
     result.calculationString = `${result.tcBreakdown.estimatedTC} (TC) × ${result.lcBreakdown.lcValue} (LC) × ${result.tlBreakdown.tlValue} (TL) = ${result.predictedCVR}`;
 
     return result;
