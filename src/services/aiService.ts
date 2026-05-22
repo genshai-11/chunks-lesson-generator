@@ -1,6 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { Resource, ColorCategory, AISettings, SentenceLength } from "../types";
 
+// Isomorphic origin: works in both browser and Node.js (server-side)
+const APP_ORIGIN =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : "https://chunks-cvr.web.app";
+
 // We lazily instantiate the Gemini client to avoid startup crashes if the key is completely missing
 function getGeminiClient(customKey?: string) {
   const key = customKey || process.env.GEMINI_API_KEY;
@@ -634,7 +640,7 @@ export async function fetchOpenRouterModels(
         method: "GET",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "HTTP-Referer": window.location.origin,
+          "HTTP-Referer": APP_ORIGIN,
           "X-Title": "CHUNKS CVR",
         },
       },
@@ -691,7 +697,8 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
 
   // ⚠️ Detect Mixed Content early: HTTP endpoint on HTTPS page will always be blocked by browser
   const rawEndpoint = (endpoint || "https://openrouter.ai/api/v1").trim();
-  if (window.location.protocol === "https:" && rawEndpoint.startsWith("http:")) {
+  const isHttpsContext = typeof window !== "undefined" && window.location.protocol === "https:";
+  if (isHttpsContext && rawEndpoint.startsWith("http:")) {
     throw new Error(
       `Mixed Content Error: Trang web chạy HTTPS nhưng endpoint đang dùng HTTP (${rawEndpoint}). Browser sẽ block request này.\n\n` +
       `Giải pháp:\n` +
@@ -711,7 +718,7 @@ async function callAI(prompt: string, settings?: AISettings): Promise<string> {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
-          "HTTP-Referer": window.location.origin,
+          "HTTP-Referer": APP_ORIGIN,
           "X-Title": "CHUNKS CVR",
         },
         body: JSON.stringify({

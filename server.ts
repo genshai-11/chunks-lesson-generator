@@ -24,6 +24,11 @@ import {
   updateChunk,
   updateResource,
 } from './src/services/serverSupabase';
+import {
+  measureCVR,
+  generateChunk,
+  generateAutoChunks,
+} from './src/services/aiService';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -838,6 +843,86 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
     }
   });
 
+  // ─── CVR Measure API ─────────────────────────────────────────────────────
+  // POST /api/measure-cvr
+  // Body: { transcript, resources?, tcCorrections?, settings? }
+  // If resources/settings omitted, fetched from Supabase server-side.
+  app.post('/api/measure-cvr', validateApiKey, async (req, res) => {
+    const { transcript, resources: bodyResources, tcCorrections, settings: bodySettings } = req.body;
+    if (!transcript || typeof transcript !== 'string') {
+      return res.status(400).json({ status: 'error', error: 'transcript (string) is required' });
+    }
+    try {
+      const [settings, resources] = await Promise.all([
+        bodySettings ? Promise.resolve(bodySettings) : getSetting('ai').catch(() => null),
+        bodyResources ? Promise.resolve(bodyResources) : getResources().catch(() => []),
+      ]);
+      const result = await measureCVR(transcript, settings as any, undefined, resources as any, tcCorrections);
+      res.json({ status: 'success', data: result });
+    } catch (error: any) {
+      console.error('[/api/measure-cvr]', error);
+      res.status(500).json({ status: 'error', error: error.message });
+    }
+  });
+
+  // ─── Chunk Generate API ───────────────────────────────────────────────────
+  // POST /api/chunk-generate
+  // Body: { resources, rTotal, iValue, uTotal, theme?, topicLevel?, sentenceLength?, settings? }
+  app.post('/api/chunk-generate', validateApiKey, async (req, res) => {
+    const { resources, rTotal, iValue, uTotal, theme, topicLevel, sentenceLength, settings: bodySettings } = req.body;
+    if (!Array.isArray(resources) || resources.length === 0) {
+      return res.status(400).json({ status: 'error', error: 'resources (array) is required' });
+    }
+    try {
+      const settings = bodySettings || await getSetting('ai').catch(() => null);
+      const result = await generateChunk({ resources, rTotal, iValue, uTotal, theme, topicLevel, sentenceLength, settings: settings as any });
+      res.json({ status: 'success', data: result });
+    } catch (error: any) {
+      console.error('[/api/chunk-generate]', error);
+      res.status(500).json({ status: 'error', error: error.message });
+    }
+  });
+
+  // ─── Batch Chunk Generate API ─────────────────────────────────────────────
+  // POST /api/chunk-generate/batch
+  // Body: { theme, topicLevel?, targetU, quantity, sentenceLength, colorPreferences, availableResources?, settings? }
+  app.post('/api/chunk-generate/batch', validateApiKey, async (req, res) => {
+    const { theme, topicLevel, targetU, quantity, sentenceLength, colorPreferences, availableResources: bodyResources, settings: bodySettings } = req.body;
+    if (!quantity || !sentenceLength) {
+      return res.status(400).json({ status: 'error', error: 'quantity and sentenceLength are required' });
+    }
+    try {
+      const [settings, availableResources] = await Promise.all([
+        bodySettings ? Promise.resolve(bodySettings) : getSetting('ai').catch(() => null),
+        bodyResources ? Promise.resolve(bodyResources) : getResources().catch(() => []),
+      ]);
+      const result = await generateAutoChunks({
+        theme: theme || '',
+        topicLevel,
+        targetU: Number(targetU) || 10,
+        quantity: Number(quantity),
+        sentenceLength,
+        colorPreferences: colorPreferences || [],
+        availableResources: availableResources as any,
+        settings: settings as any,
+      });
+      res.json({ status: 'success', data: result });
+    } catch (error: any) {
+      console.error('[/api/chunk-generate/batch]', error);
+      res.status(500).json({ status: 'error', error: error.message });
+    }
+  });
+
+  // Public Ping Endpoint — must be before Vite middleware
+  app.get('/api/ping', (req, res) => {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      message: 'M2M API Gateway is active',
+      environment: process.env.NODE_ENV || 'development',
+    });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -856,18 +941,6 @@ Return the result STRICTLY as a JSON object with this structure (example with 2 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`API health check available at /api/ping`);
-  });
-
-  // Public Ping Endpoint for Connectivity Debugging
-  // This helps verify if the gateway bypass is working without needing an API key
-  app.get('/api/ping', (req, res) => {
-    res.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      message: 'M2M API Gateway is active',
-      environment: process.env.NODE_ENV || 'development',
-      hint: 'If you still see an HTML 302, verify you are using the Shared App URL (-pre-).'
-    });
   });
 }
 
