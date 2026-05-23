@@ -1,0 +1,11 @@
+node_modules
+dist
+.env*
+.firebase
+graphify-out
+docs
+test-*.mjs
+*.md
+.gemini
+.pi
+GEMINI.md
