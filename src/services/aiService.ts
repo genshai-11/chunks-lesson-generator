@@ -398,22 +398,36 @@ Bạn là CVR Measure Engine. Nhiệm vụ của bạn là phân tích đoạn T
 3. TL (Topic/Vocabulary Level): Đánh giá theo HAI TRỤC ĐỘC LẬP, lấy max().
 
    --- TRỤC T: Topic/Discourse Level ---
-   T=1.0: Sinh hoạt đời thường, không có chuyên môn (mua sắm, thời tiết, gia đình)
-   T=1.3: Xã hội, tình cảm phức tạp, nghề nghiệp phổ thông (bán hàng, dạy học, y tá)
-   T=1.6: Chuyên môn rõ ràng (y khoa lâm sàng, pháp lý, kỹ thuật, tài chính)
-   T=1.9: Học thuật/nghiên cứu chuyên ngành hẹp (triết học, chiến lược kinh doanh phức tạp)
+   T=1.0: Sinh hoạt đời thường, không có chuyên môn (mua sắm, thời tiết, gia đình, chuyện trò hàng ngày)
+          Ví dụ: "Hôm nay trời đẹp, tôi đi chợ mua rau."
+   T=1.3: Xã hội, tâm lý phức tạp, nghề nghiệp phổ thông (bán hàng, giáo viên phổ thông, y tá, văn phòng)
+          Ví dụ: "Áp lực công việc khiến nhiều nhân viên kiệt sức và khó giữ cân bằng cuộc sống."
+   T=1.6: Chuyên môn thực hành rõ ràng — giao tiếp nghề nghiệp chuẩn (y bác sĩ, luật sư, kỹ sư, chuyên viên tài chính cấp cơ bản đến trung)
+          Ví dụ: "Bác sĩ chẩn đoán bệnh nhân mắc hội chứng chuyển hóa và đề nghị điều chỉnh lối sống."
+   T=1.8: Phân tích học thuật / chính sách / nghiên cứu liên ngành (kinh tế học, y tế công cộng, chính sách pháp luật, quản trị tổ chức phức tạp, nghiên cứu xã hội học)
+          Ví dụ: "Các cơ chế tài chính vi mô chưa đủ mạnh để giải quyết bất đối xứng thông tin trong thị trường tín dụng nông thôn."
+   T=2.0: Nghiên cứu chuyên ngành hẹp / học thuật đỉnh cao (triết học meta-lý thuyết, vật lý lý thuyết, kinh tế học toán, lâm sàng nghiên cứu chuyên sâu)
+          Ví dụ: "Tính không đầy đủ thị trường Arrow-Debreu trong điều kiện rủi ro đạo đức nội sinh đòi hỏi cơ chế ưu đãi phi tuyến."
 
    --- TRỤC V: Vocabulary/Lexical Difficulty ---
-   V=1.0: A1-A2 — từ tần suất cao, ai cũng biết (nhà, xe, ăn, đi)
-   V=1.2: B1 — từ trung cấp thông dụng (quyết định, hài lòng, thủ tục)
-   V=1.4: B2 — từ trung-cao, cần học chủ động (tiêu thụ, phân tích, dự báo)
-   V=1.6: C1 — từ nâng cao, ít gặp trong giao tiếp thường (tích lũy, đồng thuận, chiến lược)
-   V=1.8: C2 — từ bác học, hiếm, học thuật cao (hội tụ, biện chứng, trị liệu chuyên sâu)
+   V=1.0: A1-A2 — từ tần suất rất cao, ai cũng biết (nhà, xe, ăn, đi, mua, đẹp, vui)
+   V=1.2: B1 — từ trung cấp phổ thông (quyết định, hài lòng, thủ tục, cơ hội, ảnh hưởng)
+   V=1.4: B2 — từ trung-cao, cần học chủ động (tiêu thụ, phân tích, dự báo, bất bình đẳng, hiệu quả)
+   V=1.6: C1 — từ học thuật/chuyên môn phổ biến trong giới chuyên nghiệp (cơ chế, bất đối xứng, minh bạch, phân bổ nguồn lực, tích lũy, đồng thuận)
+   V=1.8: C2 — từ/cụm từ học thuật chuyên ngành, ít xuất hiện ngoài văn bản chuyên môn (bất đối xứng thông tin, tài chính vi mô, hệ số co giãn, phân tích đa biến, trung gian hóa)
+   V=2.0: Thuật ngữ siêu chuyên biệt, chỉ dùng trong tài liệu nghiên cứu hẹp (hàm Lagrangian, giảo luận siêu hình, đồng phân lập thể, meta-phân tích RCT)
 
    --- QUY TẮC KẾT HỢP ---
    TL = max(T, V)   →  làm tròn 0.1 gần nhất, clamp [1.0, 2.0]
    *Ví dụ: Chủ đề đời sống (T=1.0) nhưng dùng từ C1 (V=1.6) → TL=1.6*
-   *Ví dụ: Chủ đề y khoa (T=1.6) nhưng dùng từ A2 (V=1.0) → TL=1.6*
+   *Ví dụ: Chủ đề y khoa thực hành (T=1.6) nhưng dùng từ A2 (V=1.0) → TL=1.6*
+   *Ví dụ: Phân tích chính sách tài chính nông thôn (T=1.8) + từ C2 (V=1.8) → TL=1.8*
+   *Ví dụ: Nghiên cứu kinh tế học toán (T=2.0) + thuật ngữ hẹp (V=2.0) → TL=2.0*
+
+   ⚠️ ANTI-BIAS RULE: Đừng mặc định dừng ở 1.6 khi transcript rõ ràng là academic/policy/nghiên cứu liên ngành.
+   Nếu topic là phân tích chính sách, nghiên cứu học thuật, hoặc ngôn ngữ chuyên ngành phức tạp → T ≥ 1.8.
+   Nếu vocab ngoài TC resources gồm nhiều từ C2 hoặc thuật ngữ chuyên ngành hẹp → V ≥ 1.8.
+   TL=1.6 chỉ đúng cho giao tiếp nghề nghiệp THỰC HÀNH (bác sĩ nói chuyện với bệnh nhân, luật sư tư vấn thông thường). TL=1.8+ dành cho phân tích/nghiên cứu/viết học thuật.
 
    IMPORTANT: Idioms/metaphors (RED) và Technical Terms (PINK) đã được tính vào TC. Khi đánh giá Trục V, hãy nhìn vào từ vựng NGOÀI các TC resources — các tính từ, động từ, danh từ chức năng trong câu.
 
